@@ -64,7 +64,7 @@ char currISO[ACLEN];
 char outputmode[16];
 char linesep[4] = "\n";
 char envstring[LINELEN];
-char version[] = "1.1";
+char version[] = "1.11";
 // debug/profiling/stats stuff
 int debug;
 int totalbins=0;
@@ -467,7 +467,7 @@ int pepx_merge_with_prev_res(char endres[MAXSEQ][ACLEN], char curres[MAXSEQ][ACL
 char isoonly[ACLEN], *dashptr;  
 int i,j;
 
-//fprintf(stderr,"acst: %s\n",acstr);
+//fprintf(stderr,"acstring: %s\n",acstr);
 j = rescnt;
 if(strlen(acstr) == 0) // first pep of a query
   for(i=0;i<rescnt;i++)
@@ -483,7 +483,7 @@ else // Check the match did exist for previous peps
      if((dashptr=strrchr(isoonly,'-')) != isoonly + 6)
        // Remove variant pos before searching prev results
        *dashptr = 0;
-     //fprintf(stderr,"checking %s (result %d/%d)\n",isoonly,i,rescnt);
+     //fprintf(stderr,"checking %s (result %d/%d)\n",isoonly,i+1,rescnt);
      if(strstr(acstr,isoonly))
        strcpy(endres[j++],curres[i]);
      }
@@ -505,6 +505,7 @@ int pepx_search(char* query, IDXDATA* idx)
 typedef char actab[ACLEN];  
 int i, j, jpos=-1, jcnt=0, found, rescnt=0, pepsize, fpos;
 char querystring[MAXPEPSIZE], ac[ACLEN], newquery[MAXPEPSIZE], fname[LINELEN], buf[MAXPEPSIZE+1], *ptr;
+char acholder[ACLEN+1];
 actab *currentresults;
 FILE* ffh;
 
@@ -601,15 +602,21 @@ else if (jpos == pepsize-1)
 // No jokers
 if(!bsearch(querystring,NULL,idx[pepsize].elemcnt,pepsize+11,compare))
   // No match
+  {
+  //fprintf(stderr,"\n%s: not found in %s\n",querystring,idx==idxinfoIL?"ILindex":"BaseIndex");  
   return(0);
+  }
+//fprintf(stderr,"\n%s: found in %s\n",querystring,idx==idxinfoIL?"ILindex":"BaseIndex");
 fpos = atoi(currentresult + pepsize);
 ffh = idx[pepsize].ffh;
 fseek(ffh,fpos,SEEK_SET);
 // skip peptide
 fgets(ac,ACLEN,ffh);
-while(fgets(ac,ACLEN,ffh))
+//fprintf(stderr,"\nReading match ACs for %s\n",ac);
+while(fgets(acholder,ACLEN+1,ffh))
      // get all ACs
      {
+     strncpy(ac,acholder,ACLEN);  
      if(strlen(ac) > 7)
        {
        if(ptr=strrchr(ac,'\n'))
@@ -620,7 +627,10 @@ while(fgets(ac,ACLEN,ffh))
        strcpy(currentresults[rescnt++],ac);
        }
      else
+       {
+       //fprintf(stderr,"\nBreaking at %s\n",ac);	 
        break;
+       }
      }
 return(rescnt);
 }
@@ -685,10 +695,14 @@ while(strlen(query) > MAXPEPSIZE)
    if(IL_merge)
      {
      cntIL = pepx_search(subquery,idxinfoIL);
+     //fprintf(stderr,"\n%s had %d IL matches\n",subquery,cntIL);
      if(cntIL == 0) // unmatched subquery
        return(pepx_reportnomatch(outputmode,querystring,orgquerystring));
-     if(cntIL=pepx_merge_with_prev_res(finalresIL,resultsIL, acstringIL,cntIL) == 0)	 
+     if(cntIL=pepx_merge_with_prev_res(finalresIL,resultsIL, acstringIL,cntIL) == 0)
+       {
+       //fprintf(stderr,"\nmerge failed for %s\n",subquery);	 
        return(pepx_reportnomatch(outputmode,querystring,orgquerystring));
+       }
      }
    cnt=pepx_search(subquery,idxinfo);
    if((cnt==0) && !IL_merge)
@@ -1182,7 +1196,7 @@ if(!strcmp(command,"build"))
     exit(2);
     }
   start = clock();
-  strcpy(seqfname,argv[2]);
+  //strcpy(seqfname,argv[2]);
   printf("Building with seqfile %s, indexes at %s, variants at %s\n",seqfname,indexfolder,ignore_variants?"ignored":varfolder);
   //exit(0);
   pepx_build(seqfname);
