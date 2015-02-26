@@ -64,7 +64,7 @@ char currISO[ACLEN];
 char outputmode[16];
 char linesep[4] = "\n";
 char envstring[LINELEN];
-char version[] = "1.11";
+char version[] = "1.12";
 // debug/profiling/stats stuff
 int debug;
 int totalbins=0;
@@ -141,9 +141,10 @@ if((NextProtvariants=fopen(fname,"r"))==NULL)
   
 // Reset table each time  
 memset(variants,0,MAXSEQSIZE*4);
- 
+// Todo: check that orgAA is exactly the same (seq/vars desynchronization) 
 while(fgets(buf,LINELEN,NextProtvariants))
      {
+     //continue;  
      //printf("%s",buf);
      if(ptr=strstr(buf,"original_sequence"))
        {
@@ -461,7 +462,7 @@ return(0);
 }
 
 // ---------------- pepx_merge_with_prev_res ---------------------
-int pepx_merge_with_prev_res(char endres[MAXSEQ][ACLEN], char curres[MAXSEQ][ACLEN], char* acstr, int rescnt)
+int pepx_merge_with_prev_res(char endres[MAXSEQ][ACLEN+4], char curres[MAXSEQ][ACLEN], char* acstr, int rescnt)
 {
 // TODO: keep a better trace of variant matches, the info disappear when peptide extends too much after the variant site
 char isoonly[ACLEN], *dashptr;  
@@ -638,8 +639,8 @@ return(rescnt);
 // ---------------- pepx_processquery ---------------------
 int  pepx_processquery(char* orgquerystring)
 {
-char query[LINELEN], querystring[LINELEN], subquery[MAXPEPSIZE + 1]="", acstring[400000]="", finalres[MAXSEQ][ACLEN],acstringIL[400000]="", finalresIL[MAXSEQ][ACLEN];
-char *qptr, ac[ACLEN];
+char query[LINELEN], querystring[LINELEN], subquery[MAXPEPSIZE + 1]="", acstring[400000]="", finalres[MAXSEQ][ACLEN+4],acstringIL[400000]="", finalresIL[MAXSEQ][ACLEN+4];
+char *qptr, ac[ACLEN], ac10digits[ACLEN];
 int row=0, i, j, k, ac_cnt, cnt, cntIL, found;
 
 // TODO: rewrite and iterate one by one AA, or 1rst and last and one by one ?
@@ -713,7 +714,6 @@ while(strlen(query) > MAXPEPSIZE)
   
 if(i = strlen(query)) // otherwise we're finished
   {
-  //if(strlen(acstring)) // issue last subquery with the longest x-mer
   if(strlen(subquery)) // issue last subquery with the longest x-mer
     {
     strncpy(subquery, &querystring[strlen(querystring)-MAXPEPSIZE], MAXPEPSIZE);
@@ -793,7 +793,15 @@ if(!strcmp(outputmode,"BATCH"))
   fprintf(stdout,"\n");
   for(i=0;i<cnt;i++)
      {
-     fprintf(stdout,"%s",finalres[i]);
+     // Check for coded 10-digit ACs
+     if(!strncmp(finalres[i],"PA",2))
+       {
+       strcpy(ac10digits,"A0A087");
+       strcat(ac10digits,finalres[i]+2);
+       fprintf(stdout,"%s\n",ac10digits);
+       }
+     else  
+       fprintf(stdout,"%s",finalres[i]);
      if(i != cnt-1)
        fprintf(stdout,",");
      }
@@ -806,7 +814,17 @@ else
   {
   fprintf(stdout,"\n%s: %d match(s)%s",querystring,cnt,linesep);
   for(i=0;i<cnt;i++)
-     fprintf(stdout,"%s%s",finalres[i],linesep);
+     {
+     // Check for coded 10-digit ACs
+     if(!strncmp(finalres[i],"PA",2))
+       {
+       strcpy(ac10digits,"A0A087");
+       strcat(ac10digits,finalres[i]+2);
+       fprintf(stdout,"%s\n",ac10digits);
+       }
+     else  
+       fprintf(stdout,"%s%s",finalres[i],linesep);
+     }
   if(cnt > 20)
     fprintf(stdout,"%s: %d match(s)%s",querystring,cnt,linesep);
   }
@@ -826,6 +844,7 @@ else
   strcpy(id,currISO);
 
 pepsize = strlen(subseq);
+//if(debug && (pepsize == 6)) fprintf(stderr,"indexing %s (%s)\n",subseq, id);
 if(IL_merge)
   // Replace all L with I
   for(i=0;i<pepsize;i++)
@@ -874,7 +893,7 @@ char subseq[MAXPEPSIZE+1], varsubseq[MAXPEPSIZE+1], variant[MAXVARINPEP][MAXPEPS
 int i, k, varnb, too_many_variants = 0, seqlen, repeat_offset, varindex=1, pepsize;
 
 seqlen = strlen(seq);
-//printf("indexing %s\n",seq);
+if(debug) fprintf(stderr,"indexing %s: %s\n",currISO,seq);
 for(i=0;i<seqlen-MINPEPSIZE;i++)
    {
    // C-ters
@@ -1003,11 +1022,18 @@ if(strstr(buf,"NX_"))
 while(fgets(buf,MAXSEQSIZE,in))
     {
     strncpy(currISO,buf+3,12);
+    if(!strncmp(currISO,"A0A087",6))
+      // 10 digit AC, trick it and remember only significant digits in a unique 6-digit length format
+      {
+      strcpy(currISO,"PA");
+      strncat(currISO,buf+9,8);
+      }
     *strchr(currISO,'\t') = 0;
+    if(strchr(currISO,' '))
+      *strchr(currISO,' ') = 0;
     strncpy(currAC,currISO,6);
     currAC[6]=0;
-    //if(seqcnt > 7000)
-      //fprintf(stderr,"%s\n",currISO);
+    //if(seqcnt > 2000) fprintf(stderr,"%s\n",currISO); //debug=TRUE;
     strcpy(masterseq,strrchr(buf,'\t')+1);
     *strrchr(masterseq,'\n')=0;
     seqlen = strlen(masterseq);
@@ -1018,7 +1044,7 @@ while(fgets(buf,MAXSEQSIZE,in))
             masterseq[i] = 'I';
 
     if(!strcmp(currAC,"Pxxxxx"))
-    //if(!strcmp(currAC,"P00533"))
+    //if(!strcmp(currAC,"P05165"))
       {
       debug=TRUE;
       fprintf(stderr,"input buffer: %s...",buf);
