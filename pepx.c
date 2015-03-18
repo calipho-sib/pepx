@@ -51,10 +51,11 @@ BIN** toplevel[MAXPEPSIZE+1];
 int varindex_overflow_cnt = 0;
 char variants[MAXSEQSIZE][4];
 char results[MAXSEQ][ACLEN];
-char resultsIL[MAXSEQ][ACLEN];
-int aacode[26] = {0,2,1,2,3,4,5,6,7,-1,8,9,10,11,-1,12,13,14,15,16,1,17,18,-1,19,3};
-// B is D, Z is E, U is C
+//char resultsIL[MAXSEQ][ACLEN];
+int aacode[26] = {0,2,1,2,3,4,5,6,7,7,8,9,10,11,-1,12,13,14,15,16,1,17,18,-1,19,3};
+// B is D, Z is E, U is C, J is I
 char aarevcode[] = "ACDEFGHIKLMNPQRSTVWY";
+char aarevcodeIL[] = "ACDEFGHJKLMNPQRSTVWY";
 char matchmode[10] = "ACISO";
 int pow20[] = {1,20,400,8000,160000,3200000,64000000,1280000000};
 int binsizes[] = {0,0,1000,100,25,10,6,4};
@@ -64,7 +65,7 @@ char currISO[ACLEN];
 char outputmode[16];
 char linesep[4] = "\n";
 char envstring[LINELEN];
-char version[] = "1.12";
+char version[] = "1.2";
 // debug/profiling/stats stuff
 int debug;
 int totalbins=0;
@@ -92,7 +93,10 @@ for(i=pepsize-1;i>=0;i--)
    {
    j = sseqcode / pow20[i];
    sseqcode %= pow20[i];
-   strncat(sseq,&aarevcode[j],1);
+   if(IL_merge)
+     strncat(sseq,&aarevcodeIL[j],1);
+   else
+     strncat(sseq,&aarevcode[j],1);
    }
 strcpy(subseq,sseq);
 }
@@ -103,7 +107,6 @@ int sscode(char* subseq)
 int sseqcode = 0, len, i;
 len = strlen(subseq);
 for(i=len;i>0;i--)
-  // subsq[--i]?
   sseqcode += pow20[len-i] * (aacode[subseq[i-1] - 'A']);
 return(sseqcode);
 }
@@ -266,14 +269,20 @@ else if((ptr=getenv("PEPX")) != NULL)
 for(i=MINPEPSIZE; i<= MAXPEPSIZE;i++)
    {
    usscnt = 0;
-   sprintf(fname,"%spepx%d.idx",idxpath,i);
+   if(IL_merge)
+     sprintf(fname,"%spepxIL%d.idx",idxpath,i);
+   else  
+     sprintf(fname,"%spepx%d.idx",idxpath,i);
    if((idx=fopen(fname,"r"))==NULL)
      {
      perror(fname);
      exit(2);
      }
    // save flat file handle
-   idxinfo[i].ffh = idx;
+   if(IL_merge)
+      idxinfoIL[i].ffh = idx;
+   else
+      idxinfo[i].ffh = idx;
    strcat(fname,"2");
    if((idx=fopen(fname,"r"))==NULL)
      {
@@ -284,30 +293,15 @@ for(i=MINPEPSIZE; i<= MAXPEPSIZE;i++)
    filelen = ftell(idx);
    pepcnt = filelen/(i+11);     
    //printf("%d-mers size: %d bytes -> %d elts\n",i,filelen,pepcnt);
-   idxinfo[i].fh = idx;
-   idxinfo[i].elemcnt = pepcnt;
    if(IL_merge)
      {
-     sprintf(fname,"%spepxIL%d.idx",idxpath,i);
-     if((idx=fopen(fname,"r"))==NULL)
-       {
-       perror(fname);
-       exit(2);
-       }
-     // save flat file handle
-     idxinfoIL[i].ffh = idx;
-     strcat(fname,"2");
-     if((idx=fopen(fname,"r"))==NULL)
-       {
-       perror(fname);
-       exit(2);
-       }
-     fseek(idx,0,SEEK_END);
-     filelen = ftell(idx);
-     pepcnt = filelen/(i+11);     
-     //printf("IL: %d-mers size: %d bytes -> %d elts\n",i,filelen,pepcnt);
      idxinfoIL[i].fh = idx;
      idxinfoIL[i].elemcnt = pepcnt;
+     }
+   else
+     {
+     idxinfo[i].fh = idx;
+     idxinfo[i].elemcnt = pepcnt;
      }
    }
 }
@@ -470,12 +464,16 @@ int i,j;
 
 //fprintf(stderr,"acstring: %s\n",acstr);
 j = rescnt;
-if(strlen(acstr) == 0) // first pep of a query
+if(strlen(acstr) == 0)
+  // first pep of a query
+  {
+  //fprintf(stderr,"\nfirst 6-mer: %d hits\n",j);  
   for(i=0;i<rescnt;i++)
      {
      strcpy(endres[i],curres[i]);
      strcat(acstr,curres[i]);
      }
+  }   
 else // Check the match did exist for previous peps
   {
   for(i=j=0;i<rescnt;i++)
@@ -514,19 +512,17 @@ strcpy(querystring,query);
 pepsize = strlen(query);
 currentpepsize = pepsize;
 currentindex = idx[pepsize].fh;
-if(idx==idxinfoIL)
-  currentresults = resultsIL;
-else
-  currentresults = results;
+currentresults = results;
+
 for(i=0;i<pepsize;i++)
    if(querystring[i] == 'X')
      {
      jpos = i;
      jcnt++;
      }
-   //else if(IL_merge && query[i] == 'L')
-   else if((idx==idxinfoIL) && querystring[i] == 'L')
-     querystring[i] = 'I';
+   else if(IL_merge && (querystring[i] == 'I' || querystring[i] == 'L'))
+     // We are querying against the IL_merged index
+     querystring[i] = 'J';
      
 if(jcnt > 1)
   // joker
@@ -537,17 +533,12 @@ if(jcnt > 1)
 else if((jcnt == 1) && (jpos != 0) && (jpos != pepsize-1))
   // internal joker
   {
-  /*if((jpos == 0) || (jpos == pepsize-1))
-    {
-    fprintf(stderr,"\n%s: Joker must be internal\n",query);
-    return(0);
-    }*/
   for(i=0;i<strlen(aarevcode);i++)
      // For each of the 20 AAs
      {
      memset(newquery,0,MAXPEPSIZE);
      strncpy(newquery,querystring,jpos);
-     strncat(newquery,&aarevcode[i],1);
+     strncat(newquery,&aarevcode[i],1); // Todo: check if this works for I/L
      strcat(newquery,querystring + jpos + 1);
      //fprintf(stderr,"\nnewquery: %s\n",newquery);
      if(bsearch(newquery,NULL,idx[pepsize].elemcnt,pepsize+11,compare))
@@ -639,9 +630,9 @@ return(rescnt);
 // ---------------- pepx_processquery ---------------------
 int  pepx_processquery(char* orgquerystring)
 {
-char query[LINELEN], querystring[LINELEN], subquery[MAXPEPSIZE + 1]="", acstring[400000]="", finalres[MAXSEQ][ACLEN+4],acstringIL[400000]="", finalresIL[MAXSEQ][ACLEN+4];
+char query[LINELEN], querystring[LINELEN], subquery[MAXPEPSIZE + 1]="", acstring[400000]="", finalres[MAXSEQ][ACLEN+4];
 char *qptr, ac[ACLEN], ac10digits[ACLEN];
-int row=0, i, j, k, ac_cnt, cnt, cntIL, found;
+int row=0, i, j, k, ac_cnt, cnt, found;
 
 // TODO: rewrite and iterate one by one AA, or 1rst and last and one by one ?
 strcpy(query,orgquerystring);
@@ -673,6 +664,9 @@ if(!strcmp(outputmode,"BATCH"))
        i = i;
      else if(query[i] == 'X')
        *qptr++ = query[i];
+     else if(query[i] == 'J' && IL_merge)
+       // This is OK
+       i = i;
      else
        {
        fprintf(stderr,"\n%c is not an AA\n",query[i]);
@@ -694,21 +688,12 @@ while(strlen(query) > MAXPEPSIZE)
    strcpy(query,query + MAXPEPSIZE-1); // Prepare next subquery
    //fprintf(stderr,"will look for %s\n",query);
    if(IL_merge)
-     {
-     cntIL = pepx_search(subquery,idxinfoIL);
-     //fprintf(stderr,"\n%s had %d IL matches\n",subquery,cntIL);
-     if(cntIL == 0) // unmatched subquery
-       return(pepx_reportnomatch(outputmode,querystring,orgquerystring));
-     if(cntIL=pepx_merge_with_prev_res(finalresIL,resultsIL, acstringIL,cntIL) == 0)
-       {
-       //fprintf(stderr,"\nmerge failed for %s\n",subquery);	 
-       return(pepx_reportnomatch(outputmode,querystring,orgquerystring));
-       }
-     }
-   cnt=pepx_search(subquery,idxinfo);
-   if((cnt==0) && !IL_merge)
+     cnt = pepx_search(subquery,idxinfoIL);
+   else
+     cnt = pepx_search(subquery,idxinfo);
+   if(cnt==0)
      return(pepx_reportnomatch(outputmode,querystring,orgquerystring));     
-   if((cnt=pepx_merge_with_prev_res(finalres, results, acstring,cnt) == 0) && !IL_merge)
+   if((cnt=pepx_merge_with_prev_res(finalres, results, acstring, cnt) == 0))
      return(pepx_reportnomatch(outputmode,querystring,orgquerystring));     
    }
   
@@ -721,51 +706,18 @@ if(i = strlen(query)) // otherwise we're finished
     }
   else // query peptide was <= MAXPEPSIZE
    strcpy(subquery,query);
-  if(IL_merge)
-    {
-    cntIL = pepx_search(subquery,idxinfoIL);
-    if(cntIL == 0)
-      return(pepx_reportnomatch(outputmode,querystring,orgquerystring));
-    if((cntIL=pepx_merge_with_prev_res(finalresIL, resultsIL, acstringIL,cntIL))==0)
-      return(pepx_reportnomatch(outputmode,querystring,orgquerystring));
-    
-    }
-  cnt = pepx_search(subquery,idxinfo);
-  if((cnt==0) && !IL_merge)
+   if(IL_merge)
+     cnt = pepx_search(subquery,idxinfoIL);
+   else
+     cnt = pepx_search(subquery,idxinfo);
+  if(cnt==0)
     return(pepx_reportnomatch(outputmode,querystring,orgquerystring));     
     //fprintf(stderr,"last subquery %s gave %d matches\n",subquery,cnt);
-  cnt=pepx_merge_with_prev_res(finalres, results, acstring,cnt);
-  if((cnt == 0) && !IL_merge)
+  cnt = pepx_merge_with_prev_res(finalres, results, acstring, cnt);
+  if(cnt == 0)
     return(pepx_reportnomatch(outputmode,querystring,orgquerystring)); 
   }
 
-if(IL_merge && (cntIL != cnt))
-  // Reccopy in finalres flaging the IL matches
-  {
-  for(i=k=0;i<cntIL;i++)
-     {
-     strcpy(ac,finalresIL[i]);
-     for(j=found=0;j<cnt;j++)
-        if(!strcmp(ac,finalres[j]))
-	  {
-	  found = 1;
-	  break;  
-	  }
-     if(!found)
-       // flag as IL
-       {
-       j = strrchr(ac,'-') - ac; 	 
-       if(j < 8) // Don't combine IL anv variants for now
-         {
-         strcat(ac,"-IL");
-         strcpy(finalres[cnt+k++],ac);
-	 }
-       }
-     }
-  //cnt = cntIL;   
-  cnt += k;   
-  }
-  
 // last subquery done: finish
 if(!strcmp(matchmode,"ACONLY"))
    // Re-filter without iso ids
@@ -846,12 +798,13 @@ else
 pepsize = strlen(subseq);
 //if(debug && (pepsize == 6)) fprintf(stderr,"indexing %s (%s)\n",subseq, id);
 if(IL_merge)
-  // Replace all L with I
+  // Replace all I/L with J (Was done in pepx_build but needs to be redone for variants)
   for(i=0;i<pepsize;i++)
-     if(subseq[i] == 'L')
-       subseq[i] = 'I';
-
+     if((subseq[i] == 'I') || (subseq[i] == 'L'))
+       subseq[i] = 'J';
+//fprintf(stderr,"computing sscode for %s\n",subseq);
 sseqcode = sscode(subseq);
+//fprintf(stderr,"sscode: %X\n",sseqcode);
 binarray = toplevel[pepsize];
 binptr = binarray[sseqcode];
 if(binptr == NULL)
@@ -884,6 +837,7 @@ else
   //if(!strcmp(subseq,"AAAA"))  fprintf(stdout,"%s in %s now at %d\n",subseq,currAC,i);
   }
 //if(!strcmp(subseq,"SRSDNA"))  fprintf(stdout,"%s in %s stored at pos %d in bin\n",subseq,currAC,i);
+//fprintf(stderr,"pepx_indexsubseq end\n");
 }
 
 // ---------------- pepx_indexseq ---------------------
@@ -914,7 +868,7 @@ for(i=0;i<seqlen-MINPEPSIZE;i++)
       if(debug)
         if(pepsize == 6) fprintf(stderr,"%s at pos %d: %s\n",currAC,i,subseq);	
       if(varcnt)
-	// This sequece has variants
+	// This sequence has variants
 	{
         for(k=0;k<pepsize;k++)
           // generate variant subseqs
@@ -1038,10 +992,10 @@ while(fgets(buf,MAXSEQSIZE,in))
     *strrchr(masterseq,'\n')=0;
     seqlen = strlen(masterseq);
     if(IL_merge)
-      // Replace all L with I
+      // Replace all I/L with J
       for(i=0;i<seqlen;i++)
-         if(masterseq[i] == 'L')
-            masterseq[i] = 'I';
+         if((masterseq[i] == 'I') || (masterseq[i] == 'L'))
+            masterseq[i] = 'J';
 
     if(!strcmp(currAC,"Pxxxxx"))
     //if(!strcmp(currAC,"P05165"))
