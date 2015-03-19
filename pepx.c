@@ -1080,7 +1080,7 @@ if(argc < 2)
  {
  if((ptr=getenv("QUERY_STRING")) == NULL)
    {
-   fprintf(stderr,"Usage: maxindex [build or search or search-noiso] [filename or peptide or INTERACTIVE (if search)]\n");
+   fprintf(stderr,"Usage: pepx [build or search or search-noiso] [filename or peptide or INTERACTIVE (if search)]\n");
    fprintf(stderr,"if no peptide is given as second arg, then they are read from stdin\n\n");
    exit(1);
    }
