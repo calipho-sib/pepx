@@ -1,3 +1,4 @@
+// For now update both at git github.com/calipho-sib/pepx and svn http://trac/svn/NextProt/main/trunk/com.genebio.nextprot.tools.sequence
 #include <stdio.h>
 #include <ctype.h>
 #include <stdlib.h>
@@ -595,7 +596,7 @@ else if (jpos == pepsize-1)
 if(!bsearch(querystring,NULL,idx[pepsize].elemcnt,pepsize+11,compare))
   // No match
   {
-  //fprintf(stderr,"\n%s: not found in %s\n",querystring,idx==idxinfoIL?"ILindex":"BaseIndex");  
+  fprintf(stderr,"\n%s: not found in %s\n",querystring,idx==idxinfoIL?"ILindex":"BaseIndex");  
   return(0);
   }
 //fprintf(stderr,"\n%s: found in %s\n",querystring,idx==idxinfoIL?"ILindex":"BaseIndex");
@@ -628,7 +629,7 @@ return(rescnt);
 }
 
 // ---------------- pepx_processquery ---------------------
-int  pepx_processquery(char* orgquerystring)
+int pepx_processquery(char* orgquerystring)
 {
 char query[LINELEN], querystring[LINELEN], subquery[MAXPEPSIZE + 1]="", acstring[400000]="", finalres[MAXSEQ][ACLEN+4];
 char *qptr, ac[ACLEN], ac10digits[ACLEN];
@@ -662,15 +663,13 @@ if(!strcmp(outputmode,"BATCH"))
      || (query[i] == ')'))
        // just don't copy unwanted, and allow to keep eventually tagged seq for result display
        i = i;
-     else if(query[i] == 'X')
-       *qptr++ = query[i];
-     else if(query[i] == 'J' && IL_merge)
+     else if((query[i] == 'X') || (query[i] == 'J' && IL_merge))
        // This is OK
-       i = i;
+       *qptr++ = query[i];
      else
        {
        fprintf(stderr,"\n%c is not an AA\n",query[i]);
-       return;
+       return(0);
        }
      }
    else
@@ -682,9 +681,10 @@ strcpy(query,querystring);
   
 while(strlen(query) > MAXPEPSIZE)
    { // Split query in overlaping subqueries of maximum length 
+   //fprintf(stderr,"pepx_processquery filtered query: %s, copying %d AAs i subquery\n",query,MAXPEPSIZE);
    strncpy(subquery,query,MAXPEPSIZE);
    subquery[MAXPEPSIZE] = 0;
-   //fprintf(stderr,"subquery %s\n",subquery);
+   //fprintf(stderr,"pepx_processquery subquery %s\n",subquery);
    strcpy(query,query + MAXPEPSIZE-1); // Prepare next subquery
    //fprintf(stderr,"will look for %s\n",query);
    if(IL_merge)
@@ -692,13 +692,17 @@ while(strlen(query) > MAXPEPSIZE)
    else
      cnt = pepx_search(subquery,idxinfo);
    if(cnt==0)
-     return(pepx_reportnomatch(outputmode,querystring,orgquerystring));     
+     {
+     //fprintf(stderr,"pepx_processquery: no match for subquery %s\n",subquery);
+     return(pepx_reportnomatch(outputmode,querystring,orgquerystring));
+     }
    if((cnt=pepx_merge_with_prev_res(finalres, results, acstring, cnt) == 0))
      return(pepx_reportnomatch(outputmode,querystring,orgquerystring));     
    }
-  
+//fprintf(stderr,"pepx_processquery last complete subquery OK\n");  
 if(i = strlen(query)) // otherwise we're finished
   {
+  //fprintf(stderr,"pepx_processquery query not finished, prepare next subquery\n");
   if(strlen(subquery)) // issue last subquery with the longest x-mer
     {
     strncpy(subquery, &querystring[strlen(querystring)-MAXPEPSIZE], MAXPEPSIZE);
