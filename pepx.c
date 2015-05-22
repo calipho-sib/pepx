@@ -66,7 +66,7 @@ char currISO[ACLEN];
 char outputmode[16];
 char linesep[4] = "\n";
 char envstring[LINELEN];
-char version[] = "1.2";
+char version[] = "1.21";
 // debug/profiling/stats stuff
 int debug;
 int totalbins=0;
@@ -113,9 +113,10 @@ return(sseqcode);
 }
 
 // ---------------- pepx_build_varindex ---------------------
-int pepx_build_varindex(char* iso)
+int pepx_build_varindex(char* isoname)
 {
 char buf[LINELEN], orgAA[16], lastorgAA[16], varAA[16], AAbuf[LINELEN], fname[64], command[256], *ptr;
+char iso[16];
 int i, skipvar = 0, cmdres, fpos, lastfpos, lpos, localvarcnt=0;
 FILE *NextProtvariants;
 
@@ -123,9 +124,18 @@ if(debug)
   fprintf(stderr,"Building variants for %s\n",currISO);
 // Get variants from NextProt
 //sprintf(command,"wget -q \"http://www.nextprot.org/rest/isoform/NX_%s/variant?format=json\" -O NX_variants.txt",iso);
+if(!strncmp(isoname,"PA",2))
+  // get around 10-len accs
+  {
+  strcpy(iso,"A0A087");
+  strcat(iso,isoname+2);
+  }
+else strcpy(iso,isoname);
+
 sprintf(fname,"%s/%s.txt",varfolder,iso);
 //sprintf(fname,"/share/sib/common/Calipho/alain/variants/%s.txt",iso);
 if((NextProtvariants=fopen(fname,"r"))==NULL)
+  // THe variant file doesn't exist for this iso : ask for it
   {
   sprintf(command,"wget -q \"%s/rest/isoform/NX_%s/variant?format=json\" -O %s",RESTserver,iso,fname);
   cmdres = system(command);
@@ -139,7 +149,6 @@ if((NextProtvariants=fopen(fname,"r"))==NULL)
     perror(fname);
     fprintf(stderr,"%s\n",command);
     exit(7);
-    //return(0);
     }
   }
   
@@ -991,7 +1000,7 @@ while(fgets(buf,MAXSEQSIZE,in))
       *strchr(currISO,' ') = 0;
     strncpy(currAC,currISO,6);
     currAC[6]=0;
-    //if(seqcnt > 2000) fprintf(stderr,"%s\n",currISO); //debug=TRUE;
+    //if(seqcnt > 38000) fprintf(stderr,"%s\n",currISO); //debug=TRUE;
     strcpy(masterseq,strrchr(buf,'\t')+1);
     *strrchr(masterseq,'\n')=0;
     seqlen = strlen(masterseq);
@@ -1002,7 +1011,7 @@ while(fgets(buf,MAXSEQSIZE,in))
             masterseq[i] = 'J';
 
     if(!strcmp(currAC,"Pxxxxx"))
-    //if(!strcmp(currAC,"P05165"))
+    //if(!strcmp(currAC,"P56715"))
       {
       debug=TRUE;
       fprintf(stderr,"input buffer: %s...",buf);
@@ -1084,8 +1093,9 @@ if(argc < 2)
  {
  if((ptr=getenv("QUERY_STRING")) == NULL)
    {
-   fprintf(stderr,"Usage: pepx [build or search or search-noiso] [filename or peptide or INTERACTIVE (if search)]\n");
-   fprintf(stderr,"if no peptide is given as second arg, then they are read from stdin\n\n");
+   fprintf(stderr,"Usage: pepx [--build or --search] [filename or peptide or INTERACTIVE (if search)]\n");
+   fprintf(stderr,"if no peptide is given as second arg, then they are read from stdin\n");
+   fprintf(stderr,"type pepx -h for full documentation\n\n");
    exit(1);
    }
  // for web cgi
