@@ -66,7 +66,7 @@ char currISO[ACLEN];
 char outputmode[16];
 char linesep[4] = "\n";
 char envstring[LINELEN];
-char version[] = "1.21";
+char version[] = "1.22";
 // debug/profiling/stats stuff
 int debug;
 int totalbins=0;
@@ -83,6 +83,8 @@ char varfolder[LINELEN];
 char indexfolder[LINELEN]=".";
 char RESTserver[LINELEN]="http://www.nextprot.org";
 FILE* varfh = NULL;
+static char varmatches[64][ACLEN];
+int varmatchescnt;
 
 // ---------------- code2sseq ---------------------
 void code2sseq(int sseqcode, int pepsize, char* subseq)
@@ -458,10 +460,11 @@ return (strncmp(str1,currentresult,currentpepsize));
 // ---------------- pepx_reportnomatch ---------------------
 int pepx_reportnomatch(char* orgquerystring, char* querystring, char* outputmode)
 {
-if(!strcmp(outputmode,"BATCH"))
-   fprintf(stdout,"\nNO_MATCH %s\n",orgquerystring);
-else
-   fprintf(stdout,"%s: No match\n",querystring);
+   fprintf(stdout,"NO_MATCH %s\n", outputmode);
+//if(!strcmp(outputmode,"BATCH"))
+   //fprintf(stdout,"\nNO_MATCH %s\n",orgquerystring);
+//else
+   //fprintf(stdout,"%s: No match\n",querystring);
 return(0);
 }
 
@@ -469,7 +472,8 @@ return(0);
 int pepx_merge_with_prev_res(char endres[MAXSEQ][ACLEN+4], char curres[MAXSEQ][ACLEN], char* acstr, int rescnt)
 {
 // TODO: keep a better trace of variant matches, the info disappear when peptide extends too much after the variant site
-char isoonly[ACLEN], *dashptr;  
+// Have an array structure to keep track of all variant matches in a query
+char isoonly[ACLEN], isovar[ACLEN]="", *dashptr;  
 int i,j;
 
 //fprintf(stderr,"acstring: %s\n",acstr);
@@ -491,10 +495,20 @@ else // Check the match did exist for previous peps
      strcpy(isoonly,curres[i]);
      if((dashptr=strrchr(isoonly,'-')) != isoonly + 6)
        // Remove variant pos before searching prev results
+       {
+       //fprintf(stderr,"%s\n",isoonly);
+       strcpy(isovar,isoonly);
        *dashptr = 0;
+       }
      //fprintf(stderr,"checking %s (result %d/%d)\n",isoonly,i+1,rescnt);
      if(strstr(acstr,isoonly))
+       {
        strcpy(endres[j++],curres[i]);
+       if(strlen(isovar))
+         if(varmatchescnt < 64) strcpy(varmatches[varmatchescnt++],isovar);
+	 else fprintf(stderr,"varmatch buffer full...\n");
+       }
+     *isovar = 0;  
      }
      
   if(j)  
@@ -605,7 +619,7 @@ else if (jpos == pepsize-1)
 if(!bsearch(querystring,NULL,idx[pepsize].elemcnt,pepsize+11,compare))
   // No match
   {
-  fprintf(stderr,"\n%s: not found in %s\n",querystring,idx==idxinfoIL?"ILindex":"BaseIndex");  
+  //fprintf(stderr,"\n%s: not found in %s\n",querystring,idx==idxinfoIL?"ILindex":"BaseIndex");  
   return(0);
   }
 //fprintf(stderr,"\n%s: found in %s\n",querystring,idx==idxinfoIL?"ILindex":"BaseIndex");
@@ -640,9 +654,9 @@ return(rescnt);
 // ---------------- pepx_processquery ---------------------
 int pepx_processquery(char* orgquerystring)
 {
-char query[LINELEN], querystring[LINELEN], subquery[MAXPEPSIZE + 1]="", acstring[400000]="", finalres[MAXSEQ][ACLEN+4];
+char query[8192], querystring[8192], subquery[MAXPEPSIZE + 1]="", acstring[400000]="", finalres[MAXSEQ][ACLEN+4];
 char *qptr, ac[ACLEN], ac10digits[ACLEN];
-int row=0, i, j, k, ac_cnt, cnt, found;
+int row=0, i, j, k, ac_cnt, cnt, found, varpos;
 
 // TODO: rewrite and iterate one by one AA, or 1rst and last and one by one ?
 strcpy(query,orgquerystring);
@@ -677,6 +691,7 @@ if(!strcmp(outputmode,"BATCH"))
        *qptr++ = query[i];
      else
        {
+	 // Todo: Maybe consider U as C
        fprintf(stderr,"\n%c is not an AA\n",query[i]);
        return(0);
        }
@@ -686,7 +701,7 @@ if(!strcmp(outputmode,"BATCH"))
    }
 *qptr=0;
 strcpy(query,querystring);
-
+//if(strlen(query) >= 4096) {strncpy(subquery,query,12); subquery[12] = 0; fprintf(stderr,"\nQuery length: %d %s...\n",strlen(query),subquery);}
   
 while(strlen(query) > MAXPEPSIZE)
    { // Split query in overlaping subqueries of maximum length 
@@ -754,9 +769,12 @@ if(!strcmp(matchmode,"ACONLY"))
    }  
    
 if(!strcmp(outputmode,"BATCH"))
+  // input from file
   {
   fprintf(stdout,"\n");
-  for(i=0;i<cnt;i++)
+  if(cnt == 0)
+    fprintf(stdout,"NO_MATCH");
+  else for(i=0;i<cnt;i++)
      {
      // Check for coded 10-digit ACs
      if(!strncmp(finalres[i],"PA",2))
@@ -766,12 +784,21 @@ if(!strcmp(outputmode,"BATCH"))
        fprintf(stdout,"%s\n",ac10digits);
        }
      else  
+       {
+       if(varmatchescnt)
+         for(varpos=0;varpos < varmatchescnt; varpos++)
+            if(!strncmp(finalres[i],varmatches[varpos],strlen(finalres[i])))
+	      // Replace with AC with variant pos
+             {
+	     //fprintf(stderr,"variant match %s\n",varmatches[varpos]);
+	     strcpy(finalres[i],varmatches[varpos]);
+             break;
+	     }
        fprintf(stdout,"%s",finalres[i]);
+       }
      if(i != cnt-1)
        fprintf(stdout,",");
      }
-  if(cnt == 0)
-    fprintf(stdout,"NO_MATCH");
   // Reminder of the query
   fprintf(stdout," %s\n",orgquerystring);
   }
@@ -793,6 +820,7 @@ else
   if(cnt > 20)
     fprintf(stdout,"%s: %d match(s)%s",querystring,cnt,linesep);
   }
+varmatchescnt = 0;  // reset for next query
 return(cnt);  
 }
 
@@ -1066,8 +1094,8 @@ fprintf(stderr,"- only 1 joker (X) allowed in a given x-mer\n");
 // ---------------- main ---------------------
 int main(int argc, char **argv)
 {
-char *ptr, seqfname[LINELEN]="", command[LINELEN], querystring[LINELEN];
-char query[LINELEN], pepfname[LINELEN]="";
+char *ptr, seqfname[LINELEN]="", command[LINELEN], querystring[8192];
+char query[8192], pepfname[LINELEN]="";
 int i, c;
 int option_index = 0; // getopt_long stores the option index here.
 FILE* inputstream = stdin;
@@ -1109,6 +1137,9 @@ if(argc < 2)
    if(ptr=strstr(envstring,"=noiso"))
       // output matches at the entry level
       strcpy(matchmode,"ACONLY");
+   if(ptr=strstr(envstring,"=IL"))
+      // IL-merged indexes
+      IL_merge = 1;
    }
  else
    {
@@ -1216,7 +1247,7 @@ else if(!strncmp(command,"search",6))
      if(!strcmp(querystring,"INTERACTIVE"))
        printf("\nEnter or paste peptide query (spaces and digits will be skipped)? ");
      // get user input
-     if(!fgets(query,LINELEN,inputstream))
+     if(!fgets(query,8192,inputstream))
        break;
      if(ptr=strrchr(query,'\n'))
        *ptr=0;
