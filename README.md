@@ -5,7 +5,7 @@ Peptide matcher across nextprot entries and variants
 
 ## To build the application
 
-gcc pep.c -o pepx
+gcc pepx.c -o pepx
 
 either generate the indexes or copy them: 'cp /share/sib/common/Calipho/alain/pepxvaridx/* .'
 
