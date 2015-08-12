@@ -66,7 +66,7 @@ char currISO[ACLEN];
 char outputmode[16];
 char linesep[4] = "\n";
 char envstring[LINELEN];
-char version[] = "1.22";
+char version[] = "1.23";
 // debug/profiling/stats stuff
 int debug;
 int totalbins=0;
@@ -812,12 +812,12 @@ else
        {
        strcpy(ac10digits,"A0A087");
        strcat(ac10digits,finalres[i]+2);
-       fprintf(stdout,"%s\n",ac10digits);
-       }
+       fprintf(stdout,"%s%s",ac10digits,linesep);
+      }
      else  
        fprintf(stdout,"%s%s",finalres[i],linesep);
      }
-  if(cnt > 20)
+  //if(cnt > 20)
     fprintf(stdout,"%s: %d match(s)%s",querystring,cnt,linesep);
   }
 varmatchescnt = 0;  // reset for next query
