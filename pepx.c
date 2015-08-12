@@ -10,8 +10,10 @@
 
 #define FALSE 0
 #define TRUE  1
-#define MAXSEQ 20500
+#define MAXSEQ 32768
+// MAXSEQ max number of results for a query
 #define MAXSEQSIZE 36500
+// MAXSEQSIZE = size of titin longest isoform
 #define MAXISO 100
 #define MAXVARINPEP 63
 #define LINELEN 1024
