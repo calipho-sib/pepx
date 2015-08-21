@@ -68,7 +68,7 @@ char currISO[ACLEN];
 char outputmode[16];
 char linesep[4] = "\n";
 char envstring[LINELEN];
-char version[] = "1.23";
+char version[] = "1.24";
 // debug/profiling/stats stuff
 int debug;
 int totalbins=0;
@@ -88,6 +88,55 @@ FILE* varfh = NULL;
 static char varmatches[64][ACLEN];
 int varmatchescnt;
 
+// ---------------- code4tenAA ---------------------
+char* code4tenAA(char* currentAC)
+{
+int i, found=0;
+char codedAC[16]="";
+static char* tab[]={"A A0A087","B A0A0B4",""};
+
+if(!strncmp(currentAC,"P",1))
+  // convert back to 10 digit AC
+  {
+  strncpy(codedAC,currentAC+1,1);
+  codedAC[1] = 0;
+  for(i=0;i<2;i++)
+     if(!strncmp(tab[i],codedAC,1)) 
+      {
+      found=1;
+      break;
+      }
+  if(found)
+    {
+    strcpy(codedAC,tab[i]+2);
+    strcat(codedAC,currentAC+2);
+    return(codedAC);
+    }
+  else
+    strcpy(codedAC,"XXXXXX");
+  }
+else
+  // convert to 6 digit AC
+  {
+  strncpy(codedAC,currentAC,6);
+  codedAC[6]=0;
+  for(i=0;i<2;i++)
+    if(strstr(tab[i],codedAC))
+      {
+      found=1;
+      break;
+      }
+  if(found)
+    {
+    strcpy(codedAC,"P");
+    strncat(codedAC,tab[i],1);
+    strcat(codedAC,currentAC+6);
+    }
+  else
+    strcpy(codedAC,"XXXXXX");
+  }    
+return(codedAC);
+}
 // ---------------- code2sseq ---------------------
 void code2sseq(int sseqcode, int pepsize, char* subseq)
 {
@@ -128,11 +177,12 @@ if(debug)
   fprintf(stderr,"Building variants for %s\n",currISO);
 // Get variants from NextProt
 //sprintf(command,"wget -q \"http://www.nextprot.org/rest/isoform/NX_%s/variant?format=json\" -O NX_variants.txt",iso);
-if(!strncmp(isoname,"PA",2))
+if(!strncmp(isoname,"PA",2) || !strncmp(isoname,"PB",2))
   // get around 10-len accs
   {
-  strcpy(iso,"A0A087");
-  strcat(iso,isoname+2);
+  strcpy(iso,code4tenAA(iso)); // TODO: test
+  //strcpy(iso,"A0A087");
+  //strcat(iso,isoname+2);
   }
 else strcpy(iso,isoname);
 
@@ -779,10 +829,10 @@ if(!strcmp(outputmode,"BATCH"))
   else for(i=0;i<cnt;i++)
      {
      // Check for coded 10-digit ACs
-     if(!strncmp(finalres[i],"PA",2))
+     if(!strncmp(finalres[i],"PA",2) || !strncmp(finalres[i],"PB",2))
        {
-       strcpy(ac10digits,"A0A087");
-       strcat(ac10digits,finalres[i]+2);
+       strcpy(ac10digits,code4tenAA(finalres[i]));
+       //strcat(ac10digits,finalres[i]+2);
        fprintf(stdout,"%s\n",ac10digits);
        }
      else  
@@ -810,10 +860,9 @@ else
   for(i=0;i<cnt;i++)
      {
      // Check for coded 10-digit ACs
-     if(!strncmp(finalres[i],"PA",2))
+     if(!strncmp(finalres[i],"PA",2) || !strncmp(finalres[i],"PB",2))
        {
-       strcpy(ac10digits,"A0A087");
-       strcat(ac10digits,finalres[i]+2);
+       strcpy(ac10digits,code4tenAA(finalres[i]));
        fprintf(stdout,"%s%s",ac10digits,linesep);
       }
      else  
@@ -990,7 +1039,7 @@ for(i=0;i<seqlen-MINPEPSIZE;i++)
 void pepx_build(char* seqfilename)
 {
 FILE *in;
-char fname[LINELEN], varaa, *ptr, *varptr, varbuf[16], buf[MAXSEQSIZE];
+char fname[LINELEN], varaa, *ptr, *varptr, varbuf[16], buf[MAXSEQSIZE], shortenedAC[16];
 int seqcnt=0, currVarcnt, i, seqlen;
 
 /* if((varfh=fopen("NextProtvariants","w"))==NULL)
@@ -1019,18 +1068,28 @@ if(strstr(buf,"NX_"))
 while(fgets(buf,MAXSEQSIZE,in))
     {
     strncpy(currISO,buf+3,12);
-    if(!strncmp(currISO,"A0A087",6))
-      // 10 digit AC, trick it and remember only significant digits in a unique 6-digit length format
-      {
-      strcpy(currISO,"PA");
-      strncat(currISO,buf+9,8);
-      }
-    *strchr(currISO,'\t') = 0;
+    if(strchr(currISO,'\t'))
+      *strchr(currISO,'\t') = 0;
     if(strchr(currISO,' '))
       *strchr(currISO,' ') = 0;
+    if(!strncmp(currISO,"A0A0",4))
+      // 10 digit AC, trick it and remember only significant digits in a unique 6-digit length format (there is no real AC starting with P[A-Z]
+      {
+      //fprintf(stderr,"%s -> ",currISO);
+      strcpy(shortenedAC,code4tenAA(currISO));
+      if(!strcmp(shortenedAC,"XXXXXX"))
+      // A new kind of 10 digit AC has appeared
+        {
+        fprintf(stderr,"Unknown/Untractable AC: %s..skipped\n",currISO);
+        continue;
+        }
+      else  
+        strcpy(currISO,shortenedAC);
+      //fprintf(stderr,"%s\n",shortenedAC);
+      }
     strncpy(currAC,currISO,6);
     currAC[6]=0;
-    //if(seqcnt > 38000) fprintf(stderr,"%s\n",currISO); //debug=TRUE;
+    //if(seqcnt > 38000)  fprintf(stderr,"%s\n",currISO); //debug=TRUE;
     strcpy(masterseq,strrchr(buf,'\t')+1);
     *strrchr(masterseq,'\n')=0;
     seqlen = strlen(masterseq);
@@ -1041,7 +1100,7 @@ while(fgets(buf,MAXSEQSIZE,in))
             masterseq[i] = 'J';
 
     if(!strcmp(currAC,"Pxxxxx"))
-    //if(!strcmp(currAC,"P56715"))
+    //if(!strcmp(currAC,"O75044"))
       {
       debug=TRUE;
       fprintf(stderr,"input buffer: %s...",buf);
