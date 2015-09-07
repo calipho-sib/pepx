@@ -193,7 +193,7 @@ char *token, buf[LINELEN], entryvarbuf[524288]="", org[64], dest[128], fname[128
 int startpos, endpos, i=0;
 
 fprintf(stderr,"Building for first time with variants, please wait...\n");
-sprintf(fname,"pepx-data.csv");
+sprintf(fname,"pepx-variantdata.csv");
 if((varmaster=fopen(fname,"r"))==NULL)
  {
  perror(fname);
