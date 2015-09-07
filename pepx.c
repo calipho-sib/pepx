@@ -7,6 +7,7 @@
 //#include <sys/syscall.h>
 #include <errno.h>
 #include <getopt.h>
+#include <malloc.h>
 
 #define FALSE 0
 #define TRUE  1
@@ -18,10 +19,11 @@
 #define MAXVARINPEP 63
 #define LINELEN 1024
 #define ACLEN 16
-#define BINSIZE 32  // adjust w stats
-//#define BINSIZE 8  // adjust w stats
+//#define BINSIZE 32  // adjust w stats
+#define BINSIZE 16  // adjust w stats
 // optimal binsizes: 2->1000, 3->100, 4->25, 5->10, 6->?
 #define MINPEPSIZE 3
+//#define MAXPEPSIZE 5
 #define MAXPEPSIZE 6 // Allowing 7 implies adapting BINSIZE t0 low value in 7-mers (mempry pbs)
 #define SILENT 1
 #ifndef max
@@ -84,9 +86,27 @@ int IL_merge = 0;
 char varfolder[LINELEN];
 char indexfolder[LINELEN]=".";
 char RESTserver[LINELEN]="http://www.nextprot.org";
-FILE* varfh = NULL;
 static char varmatches[64][ACLEN];
 int varmatchescnt;
+
+// ---------------- display_mallinfo ---------------------
+static void  display_mallinfo()
+{
+struct mallinfo mi;
+
+mi = mallinfo();
+// for debuging purpose, old implementation: overflows after 2Gb
+printf("Total non-mmapped bytes (arena):       %d\n", mi.arena);
+printf("# of free chunks (ordblks):            %d\n", mi.ordblks);
+printf("# of free fastbin blocks (smblks):     %d\n", mi.smblks);
+printf("# of mapped regions (hblks):           %d\n", mi.hblks);
+printf("Bytes in mapped regions (hblkhd):      %d\n", mi.hblkhd);
+printf("Max. total allocated space (usmblks):  %d\n", mi.usmblks);
+printf("Free bytes held in fastbins (fsmblks): %d\n", mi.fsmblks);
+printf("Total allocated space (uordblks):      %d\n", mi.uordblks);
+printf("Total free space (fordblks):           %d\n", mi.fordblks);
+printf("Topmost releasable block (keepcost):   %d\n", mi.keepcost);
+}
 
 // ---------------- code4tenAA ---------------------
 char* code4tenAA(char* currentAC)
@@ -165,10 +185,71 @@ for(i=len;i>0;i--)
 return(sseqcode);
 }
 
+// ---------------- pepx_create_variant_files ---------------------
+int pepx_create_variant_files(char* varfolder)
+{
+FILE *varmaster, *out;
+char *token, buf[LINELEN], entryvarbuf[524288]="", org[64], dest[128], fname[128], lastac[16]="", ac[16], nxid[16], annotId[32];
+int startpos, endpos, i=0;
+
+fprintf(stderr,"Building for first time with variants, please wait...\n");
+sprintf(fname,"pepx-data.csv");
+if((varmaster=fopen(fname,"r"))==NULL)
+ {
+ perror(fname);
+ return(0);
+ }
+while(fgets(buf,LINELEN,varmaster))
+     // Sample line: "NX_P16333-1,AN_P16333_000975,183,183,V,I"
+     {
+     if(strncmp(buf,"NX_",3))
+       continue;
+     sscanf(buf,"%s %s %d %d %s %s\n",nxid, annotId, &startpos,&endpos,org,dest);
+     //sscanf(buf,"%s,%s,%d,%d,%s,%s\n",nxid,annotId, &startpos,&endpos,org,dest);
+     /*if(strlen(dest) > maxrep)
+      {
+      maxrep = strlen(dest);
+      fprintf(stderr,"maxrep: %d\n",maxrep);
+      }*/
+     //fprintf(stderr,"%s\n",buf);
+     strcpy(ac,nxid+3);
+     if(strlen(lastac) && strcmp(ac,lastac))
+       // write previous iso record 
+       {
+       sprintf(fname,"%s/%s.csv",varfolder,lastac); 
+       //fprintf(stderr,"writing %s\n",fname);
+       out=fopen(fname,"w");
+       fprintf(out,"%s",entryvarbuf);
+       fclose(out);
+       if((++i % 2000) == 0)
+         fprintf(stderr,"%d isoforms processed\n",i);
+       sprintf(buf,"%d %d %s %s\n",startpos,endpos,org,dest);
+       strcpy(entryvarbuf,buf);
+       strcpy(lastac,ac);
+       }
+     else
+       {
+       sprintf(buf,"%d %d %s %s\n",startpos,endpos,org,dest);
+       strcat(entryvarbuf,buf);
+       strcpy(lastac,ac);
+       }
+     }
+// write last record
+sprintf(fname,"%s/%s.csv",varfolder,ac); 
+out=fopen(fname,"w");
+fprintf(out,"%s",entryvarbuf);
+fclose(out);
+
+sprintf(fname,"%s/VARIANTS_OK",varfolder);
+out=fopen(fname,"w");
+fclose(out);
+return(1);
+}
+
 // ---------------- pepx_build_varindex ---------------------
 int pepx_build_varindex(char* isoname)
 {
-char buf[LINELEN], orgAA[16], lastorgAA[16], varAA[16], AAbuf[LINELEN], fname[64], command[256], *ptr;
+char buf[LINELEN], orgAA[16], lastorgAA[16], varAA[16], fname[64], *ptr;
 char iso[16];
 int i, skipvar = 0, cmdres, fpos, lastfpos, lpos, localvarcnt=0;
 FILE *NextProtvariants;
@@ -181,30 +262,14 @@ if(!strncmp(isoname,"PA",2) || !strncmp(isoname,"PB",2))
   // get around 10-len accs
   {
   strcpy(iso,code4tenAA(iso)); // TODO: test
-  //strcpy(iso,"A0A087");
-  //strcat(iso,isoname+2);
   }
 else strcpy(iso,isoname);
 
-sprintf(fname,"%s/%s.txt",varfolder,iso);
+sprintf(fname,"%s/%s.csv",varfolder,iso);
 //sprintf(fname,"/share/sib/common/Calipho/alain/variants/%s.txt",iso);
 if((NextProtvariants=fopen(fname,"r"))==NULL)
-  // THe variant file doesn't exist for this iso : ask for it
-  {
-  sprintf(command,"wget -q \"%s/rest/isoform/NX_%s/variant?format=json\" -O %s",RESTserver,iso,fname);
-  cmdres = system(command);
-  if(cmdres != 0)
-    {
-    fprintf(stderr, "system call to %s failed, errno = %d\n", command,errno);
-    exit(6);
-    }
-  else if((NextProtvariants=fopen(fname,"r"))==NULL)
-    {
-    perror(fname);
-    fprintf(stderr,"%s\n",command);
-    exit(7);
-    }
-  }
+  // THe variant file doesn't exist for this iso : no variants
+  return(0);
   
 // Reset table each time  
 memset(variants,0,MAXSEQSIZE*4);
@@ -212,101 +277,59 @@ memset(variants,0,MAXSEQSIZE*4);
 while(fgets(buf,LINELEN,NextProtvariants))
      {
      //continue;  
-     //printf("%s",buf);
-     if(ptr=strstr(buf,"original_sequence"))
-       {
-       ptr += 21;
-       strcpy(AAbuf,ptr);
-       *strchr(AAbuf,'"')=0;
-       if(strlen(AAbuf) < 3)
-	 strcpy(orgAA,AAbuf);
-       }
-     else if(ptr=strstr(buf,"variant_sequence"))
-       {
-       ptr += 20;
-       strcpy(AAbuf,ptr);
-       *strchr(AAbuf,'"')=0;
-       if(strlen(AAbuf) < 3)
-	 strcpy(varAA,AAbuf);
-       }
-     else if(ptr=strstr(buf,"first_position"))
-       fpos = atoi(ptr + 16);
-     else if(ptr=strstr(buf,"last_position"))
-       lpos = atoi(ptr + 15);
-     else if(strstr(iso,"P04637") && strstr(buf,"description") && strstr(buf,"sporadic"))
-        // P53 has more than 1 variant per AA -> filter
+     sscanf(buf,"%d %d %s %s\n",&fpos,&lpos,orgAA, varAA);
+     //if(strstr(iso,"P04637") && strstr(buf,"description") && strstr(buf,"sporadic"))
+     if(strstr(iso,"P04637") || fpos==1 || strchr(varAA,'*') || (strlen(orgAA) > 2)  || (strlen(varAA) > 2))
+        // P53 has more than 1 variant per AA -> filter // No variants on Met-1 allowed // No stop variants allowed
        skipvar = 1;
-     else if(strstr(buf,"identifiers"))
+     if(skipvar)
        {
-       fgets(buf,LINELEN,NextProtvariants);
-       fgets(buf,LINELEN,NextProtvariants);
-       if(strchr(buf,']'))
-	 // This is a MUTAGEN -> not valid snp
-         continue;
-       if(skipvar || fpos==1)
-	 // No variants on Met-1 allowed
-         {
-	 skipvar = 0;
-         continue;
-	 }
-       // Check is true SNP
-       if((fpos != lpos) || strchr(varAA,'*'))
-         {
-	 if((strlen(orgAA) == 2) && (strlen(varAA) == 2) && orgAA[0] == varAA[0])// like A7XYQ1(180-181)
+       skipvar = 0;
+       continue;
+       }
+     if((fpos != lpos))
+       {
+       if((strlen(orgAA) == 2) && (strlen(varAA) == 2) && orgAA[0] == varAA[0])// like A7XYQ1(180-181)
 	   // Store variant at 2nd pos
-	   {
-	   if(!strchr(varAA,'*'))  // like A8MZ36(163-164) or worst P21359(2308-2309)
-	     {//fprintf(stderr,"%s \n",varAA);
-	     variants[fpos][0]=varAA[1];
-	     if(varfh)
-	       fprintf(varfh,"%s\t%s-%d-%c\n",iso,orgAA,fpos,varAA[1]);
-	     localvarcnt++;
-	     }
-	   }
-	 else if((strlen(orgAA) == 2) && (strlen(varAA) == 1) && varAA[0] == orgAA[1]) // like A6NFR6-3
-	     // Store variant
+	 {
+	 variants[fpos][0]=varAA[1];
+	 localvarcnt++;
+	 }
+       else if((strlen(orgAA) == 2) && (strlen(varAA) == 1) && varAA[0] == orgAA[1]) // like A6NFR6-3
+	   // Store variant
 	   {
 	   if((fpos == lastfpos+1) && (orgAA[0] == lastorgAA[0])) // To avoid damage like in O00555-1 2219-2220 and 2220-2221
 	     {
 	     lastfpos = fpos;
 	     continue;
 	     }
-	   variants[fpos-1][0]='X';
-	   if(varfh)
-	     fprintf(varfh,"%s\t%c-%d-X\n",iso,orgAA[0],fpos);
+	   variants[fpos-1][0]='X'; // Missing
+	   varmisscnt++;
 	   strcpy(lastorgAA,orgAA);
 	   lastfpos = fpos;
 	   localvarcnt++;
 	   }
-	 
-	 //else  
-           //fprintf(stderr,"%s variant %d-%d\n",currISO,fpos,lpos);
-	 }
-       else
+	 } 
+       else 
 	 // Store variant
 	 {
 	 if(strlen(varAA) == 0)
 	   // code for 'Missing' AA
+	   {
 	   strcpy(varAA,"X");
+	   varmisscnt++;
+	   }
 	 for(i=0;i<4;i++)
-	    // Check if we already have a variant at this pos
+	    // we allow 4 different variants at each position: Check if we already have a variant at this pos
 	    if(variants[fpos-1][i] == 0)
 	      break;
 	 //if(i) fprintf(stderr,"%s: multiple variants at %d-%d\n",currISO,fpos,lpos); 
-	 if(varfh)
-           fprintf(varfh,"%s\t%s-%d-%c\n",iso,orgAA,fpos,varAA[0]);
 	 variants[fpos-1][i]=varAA[0];
 	 localvarcnt++;
 	 }
        }
-     }
 
 fclose(NextProtvariants);
-// delete file to be sure that it is not reloaded in case next query fails
-//sprintf(command,"rm NX_variants.txt");
-//system(command);
-//if(localvarcnt == 0)
-  //fprintf(stdout,"%d variant in %s\n",localvarcnt,currISO);
 if(debug)
   fprintf(stderr,"Variants done.\n");
   
@@ -1038,16 +1061,10 @@ for(i=0;i<seqlen-MINPEPSIZE;i++)
 // ---------------- pepx_build ---------------------
 void pepx_build(char* seqfilename)
 {
-FILE *in;
+FILE *in, *varcheck;
 char fname[LINELEN], varaa, *ptr, *varptr, varbuf[16], buf[MAXSEQSIZE], shortenedAC[16];
-int seqcnt=0, currVarcnt, i, seqlen;
+int seqcnt=0, currVarcnt, i, seqlen, maxvar=0;
 
-/* if((varfh=fopen("NextProtvariants","w"))==NULL)
- {
- perror("NextProtvariants");
- exit(2);
- }
-*/
 if((in=fopen(seqfilename,"r"))==NULL)
  {
  perror(seqfilename);
@@ -1055,7 +1072,19 @@ if((in=fopen(seqfilename,"r"))==NULL)
  }
 
 if(!ignore_variants)
+  {
   fprintf(stdout,"Indexing sequences with NextProt variants, please wait...\n");
+  // Check that variant files exist and otherwise build them
+  sprintf(fname,"%s/VARIANTS_OK",varfolder);
+  if((varcheck=fopen(fname,"r"))==NULL)
+    // we must build the files
+    {
+    if(!pepx_create_variant_files(varfolder))
+      exit(55);
+    }
+  else
+    fclose(varcheck);
+  }
 else
   fprintf(stdout,"Indexing sequences without variants, please wait...\n");
 if(IL_merge)
@@ -1117,14 +1146,15 @@ while(fgets(buf,MAXSEQSIZE,in))
     pepx_indexseq(masterseq,currVarcnt);
     seqcnt++;
     if((seqcnt % 1000) == 0)
+      {
       fprintf(stderr,"Processing seq %d...\n",seqcnt);
+      //display_mallinfo();
+      }
     }
 fprintf(stderr,"%d sequences indexed (%d simple variants, %d 1-miss variants)\n",seqcnt,totalvarcnt,varmisscnt);
 fprintf(stderr,"%d varindex overflows\n",varindex_overflow_cnt);
 if(!debug)
   pepx_saveall();
-if(varfh)
-  fclose(varfh);
 }
 
 // ---------------- printHelp ---------------------
