@@ -277,11 +277,11 @@ memset(variants,0,MAXSEQSIZE*4);
 // Todo: check that orgAA is exactly the same (seq/vars desynchronization) 
 while(fgets(buf,LINELEN,NextProtvariants))
      {
-     //continue;  
+     *varAA=0; //To avoid that last value is keeped when scaning a miss variant (varAA empty)
      sscanf(buf,"%d %d %s %s\n",&fpos,&lpos,orgAA, varAA);
      //if(strstr(iso,"P04637") && strstr(buf,"description") && strstr(buf,"sporadic"))
      if(fpos==1 || strchr(varAA,'*') || (strlen(orgAA) > 2)  || (strlen(varAA) > 2))
-        // P53 has more than 1 variant per AA -> filter // No variants on Met-1 allowed // No stop variants allowed
+        // No variants on Met-1 allowed // No stop variants allowed
        {
        if((strlen(varAA) == 1 && orgAA[strlen(varAA)-1] == varAA[0]) || strlen(varAA) == 0)
 	 varmisscnt3++;
