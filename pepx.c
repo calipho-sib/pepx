@@ -80,7 +80,7 @@ int umatchcnt;
 int maxoccur=0;
 int usscnt= 0;
 int totalvarcnt = 0;
-int varmisscnt = 0;
+int varmisscnt1 = 0, varmisscnt2 = 0, varmisscnt3=0;
 int ignore_variants = 0;
 int IL_merge = 0;
 char varfolder[LINELEN];
@@ -204,6 +204,7 @@ while(fgets(buf,LINELEN,varmaster))
      {
      if(strncmp(buf,"NX_",3))
        continue;
+     *dest=0; //To avoid that last value is keeped when scaning a miss variant (dest empty)
      sscanf(buf,"%s %s %d %d %s %s\n",nxid, annotId, &startpos,&endpos,org,dest);
      //sscanf(buf,"%s,%s,%d,%d,%s,%s\n",nxid,annotId, &startpos,&endpos,org,dest);
      /*if(strlen(dest) > maxrep)
@@ -221,8 +222,8 @@ while(fgets(buf,LINELEN,varmaster))
        out=fopen(fname,"w");
        fprintf(out,"%s",entryvarbuf);
        fclose(out);
-       if((++i % 2000) == 0)
-         fprintf(stderr,"%d isoforms processed\n",i);
+       if((++i % 2500) == 0)
+         fprintf(stderr,"%d isoform variant files created...\n",i);
        sprintf(buf,"%d %d %s %s\n",startpos,endpos,org,dest);
        strcpy(entryvarbuf,buf);
        strcpy(lastac,ac);
@@ -279,9 +280,13 @@ while(fgets(buf,LINELEN,NextProtvariants))
      //continue;  
      sscanf(buf,"%d %d %s %s\n",&fpos,&lpos,orgAA, varAA);
      //if(strstr(iso,"P04637") && strstr(buf,"description") && strstr(buf,"sporadic"))
-     if(strstr(iso,"P04637") || fpos==1 || strchr(varAA,'*') || (strlen(orgAA) > 2)  || (strlen(varAA) > 2))
+     if(fpos==1 || strchr(varAA,'*') || (strlen(orgAA) > 2)  || (strlen(varAA) > 2))
         // P53 has more than 1 variant per AA -> filter // No variants on Met-1 allowed // No stop variants allowed
+       {
+       if((strlen(varAA) == 1 && orgAA[strlen(varAA)-1] == varAA[0]) || strlen(varAA) == 0)
+	 varmisscnt3++;
        skipvar = 1;
+       }
      if(skipvar)
        {
        skipvar = 0;
@@ -304,7 +309,7 @@ while(fgets(buf,LINELEN,NextProtvariants))
 	     continue;
 	     }
 	   variants[fpos-1][0]='X'; // Missing
-	   varmisscnt++;
+	   varmisscnt2++;
 	   strcpy(lastorgAA,orgAA);
 	   lastfpos = fpos;
 	   localvarcnt++;
@@ -317,7 +322,7 @@ while(fgets(buf,LINELEN,NextProtvariants))
 	   // code for 'Missing' AA
 	   {
 	   strcpy(varAA,"X");
-	   varmisscnt++;
+	   varmisscnt1++;
 	   }
 	 for(i=0;i<4;i++)
 	    // we allow 4 different variants at each position: Check if we already have a variant at this pos
@@ -1151,7 +1156,7 @@ while(fgets(buf,MAXSEQSIZE,in))
       //display_mallinfo();
       }
     }
-fprintf(stderr,"%d sequences indexed (%d simple variants, %d 1-miss variants)\n",seqcnt,totalvarcnt,varmisscnt);
+fprintf(stderr,"%d sequences indexed (%d simple variants, %d/%d/%d 1-miss variants)\n",seqcnt,totalvarcnt,varmisscnt1, varmisscnt2, varmisscnt3);
 fprintf(stderr,"%d varindex overflows\n",varindex_overflow_cnt);
 if(!debug)
   pepx_saveall();
