@@ -70,7 +70,7 @@ char currISO[ACLEN];
 char outputmode[16];
 char linesep[4] = "\n";
 char envstring[LINELEN];
-char version[] = "1.24";
+char version[] = "1.25";
 // debug/profiling/stats stuff
 int debug;
 int totalbins=0;
@@ -861,7 +861,7 @@ if(!strcmp(outputmode,"BATCH"))
        {
        strcpy(ac10digits,code4tenAA(finalres[i]));
        //strcat(ac10digits,finalres[i]+2);
-       fprintf(stdout,"%s\n",ac10digits);
+       fprintf(stdout,"%s",ac10digits);
        }
      else  
        {
