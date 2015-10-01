@@ -56,7 +56,6 @@ BIN** toplevel[MAXPEPSIZE+1];
 int varindex_overflow_cnt = 0;
 char variants[MAXSEQSIZE][4];
 char results[MAXSEQ][ACLEN];
-//char resultsIL[MAXSEQ][ACLEN];
 int aacode[26] = {0,2,1,2,3,4,5,6,7,7,8,9,10,11,-1,12,13,14,15,16,1,17,18,-1,19,3};
 // B is D, Z is E, U is C, J is I
 char aarevcode[] = "ACDEFGHIKLMNPQRSTVWY";
@@ -70,7 +69,7 @@ char currISO[ACLEN];
 char outputmode[16];
 char linesep[4] = "\n";
 char envstring[LINELEN];
-char version[] = "1.25";
+char version[] = "1.3";
 // debug/profiling/stats stuff
 int debug;
 int totalbins=0;
@@ -85,9 +84,6 @@ int ignore_variants = 0;
 int IL_merge = 0;
 char varfolder[LINELEN];
 char indexfolder[LINELEN]=".";
-char RESTserver[LINELEN]="http://www.nextprot.org";
-static char varmatches[64][ACLEN];
-int varmatchescnt;
 
 // ---------------- display_mallinfo ---------------------
 static void  display_mallinfo()
@@ -206,12 +202,6 @@ while(fgets(buf,LINELEN,varmaster))
        continue;
      *dest=0; //To avoid that last value is keeped when scaning a miss variant (dest empty)
      sscanf(buf,"%s %s %d %d %s %s\n",nxid, annotId, &startpos,&endpos,org,dest);
-     //sscanf(buf,"%s,%s,%d,%d,%s,%s\n",nxid,annotId, &startpos,&endpos,org,dest);
-     /*if(strlen(dest) > maxrep)
-      {
-      maxrep = strlen(dest);
-      fprintf(stderr,"maxrep: %d\n",maxrep);
-      }*/
      //fprintf(stderr,"%s\n",buf);
      strcpy(ac,nxid+3);
      if(strlen(lastac) && strcmp(ac,lastac))
@@ -257,8 +247,6 @@ FILE *NextProtvariants;
 
 if(debug)
   fprintf(stderr,"Building variants for %s\n",currISO);
-// Get variants from NextProt
-//sprintf(command,"wget -q \"http://www.nextprot.org/rest/isoform/NX_%s/variant?format=json\" -O NX_variants.txt",iso);
 if(!strncmp(isoname,"PA",2) || !strncmp(isoname,"PB",2))
   // get around 10-len accs
   {
@@ -266,8 +254,8 @@ if(!strncmp(isoname,"PA",2) || !strncmp(isoname,"PB",2))
   }
 else strcpy(iso,isoname);
 
+// Get variants from NextProt
 sprintf(fname,"%s/%s.csv",varfolder,iso);
-//sprintf(fname,"/share/sib/common/Calipho/alain/variants/%s.txt",iso);
 if((NextProtvariants=fopen(fname,"r"))==NULL)
   // THe variant file doesn't exist for this iso : no variants
   return(0);
@@ -551,9 +539,7 @@ return(0);
 // ---------------- pepx_merge_with_prev_res ---------------------
 int pepx_merge_with_prev_res(char endres[MAXSEQ][ACLEN+4], char curres[MAXSEQ][ACLEN], char* acstr, int rescnt)
 {
-// TODO: keep a better trace of variant matches, the info disappear when peptide extends too much after the variant site
-// Have an array structure to keep track of all variant matches in a query
-char isoonly[ACLEN], isovar[ACLEN]="", *dashptr;  
+char isoonly[ACLEN], isovar[ACLEN]="", prevmatch[ACLEN]="", *dashptr, *matchptr;  
 int i,j;
 
 //fprintf(stderr,"acstring: %s\n",acstr);
@@ -566,6 +552,7 @@ if(strlen(acstr) == 0)
      {
      strcpy(endres[i],curres[i]);
      strcat(acstr,curres[i]);
+     strcat(acstr,",");
      }
   }   
 else // Check the match did exist for previous peps
@@ -576,17 +563,25 @@ else // Check the match did exist for previous peps
      if((dashptr=strrchr(isoonly,'-')) != isoonly + 6)
        // Remove variant pos before searching prev results
        {
-       //fprintf(stderr,"%s\n",isoonly);
+       //fprintf(stderr,"removing varpos for %s\n",isoonly);
        strcpy(isovar,isoonly);
        *dashptr = 0;
        }
-     //fprintf(stderr,"checking %s (result %d/%d)\n",isoonly,i+1,rescnt);
-     if(strstr(acstr,isoonly))
+     //fprintf(stderr,"checking %s (result %d/%d)\n",curres[i],i+1,rescnt);
+     if(matchptr=strstr(acstr,curres[i]))
        {
-       strcpy(endres[j++],curres[i]);
-       if(strlen(isovar))
-         if(varmatchescnt < 64) strcpy(varmatches[varmatchescnt++],isovar);
-	 else fprintf(stderr,"varmatch buffer full...\n");
+       strncpy(prevmatch,matchptr,ACLEN);
+       *strchr(prevmatch,',')=0;
+       //fprintf(stderr,"prevmatch: %s\n",prevmatch);
+       strcpy(endres[j++],prevmatch);
+       }
+     else if (isovar &&  (matchptr=strstr(acstr,isoonly)))
+       {
+       strncpy(prevmatch,matchptr,ACLEN);
+       *strchr(prevmatch,',')=0;
+       if(strrchr(prevmatch,'-') == prevmatch + 6)
+       // replace simple match by new variant match
+       strcpy(endres[j++],isovar);
        }
      *isovar = 0;  
      }
@@ -596,8 +591,11 @@ else // Check the match did exist for previous peps
    {
    *acstr = 0;
    for(i=0;i<j;i++)
-    strcat(acstr,endres[i]);
-   }
+      {
+      strcat(acstr,endres[i]);
+      strcat(acstr,",");
+      }
+    }
   }
 return(j);
 }
@@ -849,7 +847,7 @@ if(!strcmp(matchmode,"ACONLY"))
    }  
    
 if(!strcmp(outputmode,"BATCH"))
-  // input from file
+  // input from file (results are comma-separated)
   {
   fprintf(stdout,"\n");
   if(cnt == 0)
@@ -860,20 +858,10 @@ if(!strcmp(outputmode,"BATCH"))
      if(!strncmp(finalres[i],"PA",2) || !strncmp(finalres[i],"PB",2))
        {
        strcpy(ac10digits,code4tenAA(finalres[i]));
-       //strcat(ac10digits,finalres[i]+2);
        fprintf(stdout,"%s",ac10digits);
        }
      else  
        {
-       if(varmatchescnt)
-         for(varpos=0;varpos < varmatchescnt; varpos++)
-            if(!strncmp(finalres[i],varmatches[varpos],strlen(finalres[i])))
-	      // Replace with AC with variant pos
-             {
-	     //fprintf(stderr,"variant match %s\n",varmatches[varpos]);
-	     strcpy(finalres[i],varmatches[varpos]);
-             break;
-	     }
        fprintf(stdout,"%s",finalres[i]);
        }
      if(i != cnt-1)
@@ -884,6 +872,7 @@ if(!strcmp(outputmode,"BATCH"))
   }
 else
   {
+  // input from stdin (results are crlf-separated)
   fprintf(stdout,"\n%s: %d match(s)%s",querystring,cnt,linesep);
   for(i=0;i<cnt;i++)
      {
@@ -899,7 +888,7 @@ else
   //if(cnt > 20)
     fprintf(stdout,"%s: %d match(s)%s",querystring,cnt,linesep);
   }
-varmatchescnt = 0;  // reset for next query
+//varmatchescnt = 0;  // reset for next query
 return(cnt);  
 }
 
@@ -1174,7 +1163,7 @@ if(!strcmp(mode,"ARGS"))
   fprintf(stderr,"--help (short=-h) to show this help\n");
   fprintf(stderr,"--index-folder (short=-x) to specify an index folder (default is .)\n");
   fprintf(stderr,"--variant-folder (short=-w) to specify a folder for json variants (required for build command when ignore-variants flag is not set)\n");
-  fprintf(stderr,"--rest-url (short=-r) REST server to retrieve json variants when variant folder is empty (for 1rst build with a given variant folder)\n");
+  //fprintf(stderr,"--rest-url (short=-r) REST server to retrieve json variants when variant folder is empty (for 1rst build with a given variant folder)\n");
   fprintf(stderr,"--peptide-file (short=-p) a file with peptides to search (1 peptide/line, if not provided peptides will be read from stdin)\n");
   fprintf(stderr,"--ignore-variants to build indexes not considering variants\n");
   fprintf(stderr,"--IL to build indexes merging I and L\n");
@@ -1206,7 +1195,7 @@ static struct option long_options[] = {
                {"build", required_argument, 0, 'b'},
                {"peptide-file", required_argument, 0, 'p'},
                {"variant-folder",  required_argument, 0, 'w'},
-               {"rest-url",  required_argument, 0, 'r'},
+//               {"rest-url",  required_argument, 0, 'r'},
                {"index-folder",required_argument, 0, 'x'},
                {0, 0, 0, 0}
              };
@@ -1247,7 +1236,8 @@ if(argc < 2)
 else
   // non-web usage: parse command arguments
   {
-  while((c = getopt_long (argc, argv, "snhvb:p:f:w:r:x:", long_options, &option_index)) != -1)
+  //while((c = getopt_long (argc, argv, "snhvb:p:f:w:r:x:", long_options, &option_index)) != -1)
+  while((c = getopt_long (argc, argv, "snhvb:p:f:w:x:", long_options, &option_index)) != -1)
         {
        switch (c)
              {
@@ -1288,9 +1278,9 @@ else
                strcpy(varfolder,optarg);
                break;
      
-             case 'r':
-               strcpy(RESTserver, optarg);
-               break;
+             //case 'r':
+               //strcpy(RESTserver, optarg);
+               //break;
      
              case 'x':
                strcpy(indexfolder, optarg);
