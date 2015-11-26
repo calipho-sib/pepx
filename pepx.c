@@ -112,12 +112,13 @@ int i, found=0;
 char codedAC[16]="";
 static char* tab[]={"A A0A087","B A0A0B4","C A0A075"};
 
+//fprintf(stderr,"input: %s\n",currentAC);
 if(!strncmp(currentAC,"P",1))
   // convert back to 10 digit AC
   {
   strncpy(codedAC,currentAC+1,1);
   codedAC[1] = 0;
-  for(i=0;i<2;i++)
+  for(i=0;i<sizeof(tab);i++)
      if(!strncmp(tab[i],codedAC,1)) 
       {
       found=1;
@@ -127,6 +128,7 @@ if(!strncmp(currentAC,"P",1))
     {
     strcpy(codedAC,tab[i]+2);
     strcat(codedAC,currentAC+2);
+    //fprintf(stderr,"output: %s\n",codedAC);
     return(codedAC);
     }
   else
@@ -137,7 +139,7 @@ else
   {
   strncpy(codedAC,currentAC,6);
   codedAC[6]=0;
-  for(i=0;i<2;i++)
+  for(i=0;i<sizeof(tab);i++)
     if(strstr(tab[i],codedAC))
       {
       found=1;
@@ -152,6 +154,7 @@ else
   else
     strcpy(codedAC,"XXXXXX");
   }    
+//fprintf(stderr,"output: %s\n",codedAC);
 return(codedAC);
 }
 // ---------------- code2sseq ---------------------
