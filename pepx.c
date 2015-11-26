@@ -24,7 +24,8 @@
 // optimal binsizes: 2->1000, 3->100, 4->25, 5->10, 6->?
 #define MINPEPSIZE 3
 //#define MAXPEPSIZE 5
-#define MAXPEPSIZE 6 // Allowing 7 implies adapting BINSIZE t0 low value in 7-mers (mempry pbs)
+#define MAXPEPSIZE 6
+// Allowing 7 implies adapting BINSIZE t0 low value in 7-mers (memory pbs)
 #define SILENT 1
 #ifndef max
 	#define max( a, b ) ( ((a) > (b)) ? (a) : (b) )
@@ -109,7 +110,7 @@ char* code4tenAA(char* currentAC)
 {
 int i, found=0;
 char codedAC[16]="";
-static char* tab[]={"A A0A087","B A0A0B4",""};
+static char* tab[]={"A A0A087","B A0A0B4","C A0A075"};
 
 if(!strncmp(currentAC,"P",1))
   // convert back to 10 digit AC
@@ -247,7 +248,7 @@ FILE *NextProtvariants;
 
 if(debug)
   fprintf(stderr,"Building variants for %s\n",currISO);
-if(!strncmp(isoname,"PA",2) || !strncmp(isoname,"PB",2))
+if(!strncmp(isoname,"PA",2) || !strncmp(isoname,"PB",2) || !strncmp(isoname,"PC",2))
   // get around 10-len accs
   {
   strcpy(iso,code4tenAA(iso)); // TODO: test
@@ -855,7 +856,7 @@ if(!strcmp(outputmode,"BATCH"))
   else for(i=0;i<cnt;i++)
      {
      // Check for coded 10-digit ACs
-     if(!strncmp(finalres[i],"PA",2) || !strncmp(finalres[i],"PB",2))
+     if(!strncmp(finalres[i],"PA",2) || !strncmp(finalres[i],"PB",2) || !strncmp(finalres[i],"PC",2))
        {
        strcpy(ac10digits,code4tenAA(finalres[i]));
        fprintf(stdout,"%s",ac10digits);
@@ -877,7 +878,7 @@ else
   for(i=0;i<cnt;i++)
      {
      // Check for coded 10-digit ACs
-     if(!strncmp(finalres[i],"PA",2) || !strncmp(finalres[i],"PB",2))
+     if(!strncmp(finalres[i],"PA",2) || !strncmp(finalres[i],"PB",2) || !strncmp(finalres[i],"PC",2))
        {
        strcpy(ac10digits,code4tenAA(finalres[i]));
        fprintf(stdout,"%s%s",ac10digits,linesep);
