@@ -70,7 +70,7 @@ char currISO[ACLEN];
 char outputmode[16];
 char linesep[4] = "\n";
 char envstring[LINELEN];
-char version[] = "1.3";
+char version[] = "1.4";
 // debug/profiling/stats stuff
 int debug;
 int totalbins=0;
@@ -569,23 +569,32 @@ else // Check the match did exist for previous peps
        {
        //fprintf(stderr,"removing varpos for %s\n",isoonly);
        strcpy(isovar,isoonly);
+       //fprintf(stderr,"isovar now: %s\n",isovar);
        *dashptr = 0;
        }
      //fprintf(stderr,"checking %s (result %d/%d)\n",curres[i],i+1,rescnt);
      if(matchptr=strstr(acstr,curres[i]))
+       for(;matchptr;matchptr=strstr(matchptr+1,curres[i]))
        {
        strncpy(prevmatch,matchptr,ACLEN);
        *strchr(prevmatch,',')=0;
-       //fprintf(stderr,"prevmatch: %s\n",prevmatch);
-       strcpy(endres[j++],prevmatch);
+       //if(!strcmp(prevmatch,curres[i]))
+       if(strstr(prevmatch,curres[i]))
+	 // If a new match without variant falls on a previous match with variant: keep variant
+         {
+         //fprintf(stderr,"keeping prevmatch: %s\n",prevmatch);
+         strcpy(endres[j++],prevmatch);
+	 }
+       //else fprintf(stderr,"discarding prevmatch: %s\n",prevmatch);	 
        }
      else if (isovar &&  (matchptr=strstr(acstr,isoonly)))
        {
        strncpy(prevmatch,matchptr,ACLEN);
        *strchr(prevmatch,',')=0;
+       //fprintf(stderr,"isovar: %s\n",prevmatch);
        if(strrchr(prevmatch,'-') == prevmatch + 6)
-       // replace simple match by new variant match
-       strcpy(endres[j++],isovar);
+         // replace simple match by new variant match
+         strcpy(endres[j++],isovar);
        }
      *isovar = 0;  
      }
@@ -593,12 +602,14 @@ else // Check the match did exist for previous peps
   if(j)  
    // regenerate actring
    {
+   //fprintf(stderr,"regenerating ACstring\n");
    *acstr = 0;
    for(i=0;i<j;i++)
       {
       strcat(acstr,endres[i]);
       strcat(acstr,",");
       }
+    //fprintf(stderr,"regenerated ACstring: %s\n\n",acstr);  
     }
   }
 return(j);
@@ -736,7 +747,7 @@ return(rescnt);
 // ---------------- pepx_processquery ---------------------
 int pepx_processquery(char* orgquerystring)
 {
-char query[8192], querystring[8192], subquery[MAXPEPSIZE + 1]="", acstring[400000]="", finalres[MAXSEQ][ACLEN+4];
+char query[8192], querystring[8192], nextquery[8192], subquery[MAXPEPSIZE + 1]="", acstring[400000]="", finalres[MAXSEQ][ACLEN+4];
 char *qptr, ac[ACLEN], ac10digits[ACLEN];
 int row=0, i, j, k, ac_cnt, cnt, found, varpos;
 
@@ -787,11 +798,19 @@ strcpy(query,querystring);
   
 while(strlen(query) > MAXPEPSIZE)
    { // Split query in overlaping subqueries of maximum length 
-   //fprintf(stderr,"pepx_processquery filtered query: %s, copying %d AAs i subquery\n",query,MAXPEPSIZE);
+   //fprintf(stderr,"pepx_processquery filtered query: %s, copying %d AAs in subquery\n",query,MAXPEPSIZE);
    strncpy(subquery,query,MAXPEPSIZE);
    subquery[MAXPEPSIZE] = 0;
    //fprintf(stderr,"pepx_processquery subquery %s\n",subquery);
-   strcpy(query,query + MAXPEPSIZE-1); // Prepare next subquery
+   // Prepare next subquery
+   strcpy(nextquery,query + MAXPEPSIZE-1); // Faster but more false pos
+   //if(strlen(querystring) > 25)
+     //strcpy(nextquery,query + MAXPEPSIZE-1); // Faster but more false pos
+   /*else if(strlen(querystring) > 16)
+     strcpy(nextquery,query + 2);
+   else
+     strcpy(nextquery,query + 1); */
+   strcpy(query, nextquery);
    //fprintf(stderr,"will look for %s\n",query);
    if(IL_merge)
      cnt = pepx_search(subquery,idxinfoIL);
