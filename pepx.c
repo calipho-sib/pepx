@@ -544,7 +544,7 @@ return(0);
 int pepx_merge_with_prev_res(char endres[MAXSEQ][ACLEN+4], char curres[MAXSEQ][ACLEN], char* acstr, int rescnt)
 {
 char isoonly[ACLEN], isovar[ACLEN]="", prevmatch[ACLEN]="", *dashptr, *matchptr;  
-int i,j;
+int i, j, prevmatchvar;
 
 //fprintf(stderr,"acstring: %s\n",acstr);
 j = rescnt;
@@ -578,8 +578,12 @@ else // Check the match did exist for previous peps
        {
        strncpy(prevmatch,matchptr,ACLEN);
        *strchr(prevmatch,',')=0;
-       //if(!strcmp(prevmatch,curres[i]))
-       if(strstr(prevmatch,curres[i]))
+       if((dashptr=strrchr(prevmatch,'-')) != prevmatch + 6)
+	 prevmatchvar = TRUE;
+       else
+	 prevmatchvar = FALSE;
+	 
+       if(!strcmp(prevmatch,curres[i]) || (prevmatchvar && strstr(prevmatch,curres[i])))
 	 // If a new match without variant falls on a previous match with variant: keep variant
          {
          //fprintf(stderr,"keeping prevmatch: %s\n",prevmatch);
@@ -588,6 +592,7 @@ else // Check the match did exist for previous peps
        //else fprintf(stderr,"discarding prevmatch: %s\n",prevmatch);	 
        }
      else if (isovar &&  (matchptr=strstr(acstr,isoonly)))
+       // new match is a variant
        {
        strncpy(prevmatch,matchptr,ACLEN);
        *strchr(prevmatch,',')=0;
