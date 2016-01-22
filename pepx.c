@@ -20,7 +20,7 @@
 #define LINELEN 1024
 #define ACLEN 16
 //#define BINSIZE 32  // adjust w stats
-#define BINSIZE 16  // adjust w stats
+#define BINSIZE 16  // adjust w stats, this is becoming a problem, have to reduce to 12 when indexing with variants !
 // optimal binsizes: 2->1000, 3->100, 4->25, 5->10, 6->?
 #define MINPEPSIZE 3
 //#define MAXPEPSIZE 5
@@ -110,7 +110,7 @@ char* code4tenAA(char* currentAC)
 {
 int i, found=0;
 char codedAC[16]="";
-static char* tab[]={"A A0A087","B A0A0B4","C A0A075"};
+static char* tab[]={"A A0A087","B A0A0B4","C A0A075","D A0A096"};
 
 //fprintf(stderr,"input: %s\n",currentAC);
 if(!strncmp(currentAC,"P",1))
@@ -200,7 +200,7 @@ if((varmaster=fopen(fname,"r"))==NULL)
  return(0);
  }
 while(fgets(buf,LINELEN,varmaster))
-     // Sample line: "NX_P16333-1,AN_P16333_000975,183,183,V,I"
+     // Sample line: "NX_P16333-1,AN_P16333_000975,183,183,V,I", actually commas are replaced by spaces
      {
      if(strncmp(buf,"NX_",3))
        continue;
@@ -254,12 +254,13 @@ if(debug)
 if(!strncmp(isoname,"PA",2) || !strncmp(isoname,"PB",2) || !strncmp(isoname,"PC",2))
   // get around 10-len accs
   {
-  strcpy(iso,code4tenAA(iso)); // TODO: test
+  strcpy(iso,code4tenAA(isoname));
   }
 else strcpy(iso,isoname);
 
 // Get variants from NextProt
 sprintf(fname,"%s/%s.csv",varfolder,iso);
+if(debug) fprintf(stderr,"opening file: %s\n",fname);
 if((NextProtvariants=fopen(fname,"r"))==NULL)
   // THe variant file doesn't exist for this iso : no variants
   return(0);
@@ -270,6 +271,7 @@ memset(variants,0,MAXSEQSIZE*4);
 while(fgets(buf,LINELEN,NextProtvariants))
      {
      *varAA=0; //To avoid that last value is keeped when scaning a miss variant (varAA empty)
+     if(debug) fprintf(stderr,"variants line: %s\n",buf);
      sscanf(buf,"%d %d %s %s\n",&fpos,&lpos,orgAA, varAA);
      //if(strstr(iso,"P04637") && strstr(buf,"description") && strstr(buf,"sporadic"))
      if(fpos==1 || strchr(varAA,'*') || (strlen(orgAA) > 2)  || (strlen(varAA) > 2))
@@ -1140,7 +1142,7 @@ while(fgets(buf,MAXSEQSIZE,in))
       }
     strncpy(currAC,currISO,6);
     currAC[6]=0;
-    //if(seqcnt > 38000)  fprintf(stderr,"%s\n",currISO); //debug=TRUE;
+    //if(seqcnt > 38000)      fprintf(stderr,"%s\n",currISO); //debug=TRUE;
     strcpy(masterseq,strrchr(buf,'\t')+1);
     *strrchr(masterseq,'\n')=0;
     seqlen = strlen(masterseq);
@@ -1151,7 +1153,7 @@ while(fgets(buf,MAXSEQSIZE,in))
             masterseq[i] = 'J';
 
     if(!strcmp(currAC,"Pxxxxx"))
-    //if(!strcmp(currAC,"O75044"))
+    //if(!strcmp(currAC,"PBJ2A2"))
       {
       debug=TRUE;
       fprintf(stderr,"input buffer: %s...",buf);
