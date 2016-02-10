@@ -70,7 +70,7 @@ char currISO[ACLEN];
 char outputmode[16];
 char linesep[4] = "\n";
 char envstring[LINELEN];
-char version[] = "1.4";
+char version[] = "1.41";
 // debug/profiling/stats stuff
 int debug;
 int totalbins=0;
@@ -532,13 +532,10 @@ return (strncmp(str1,currentresult,currentpepsize));
 }
 
 // ---------------- pepx_reportnomatch ---------------------
-int pepx_reportnomatch(char* orgquerystring, char* querystring, char* outputmode)
+int pepx_reportnomatch(char* orgquerystring)
 {
-   fprintf(stdout,"NO_MATCH %s\n", outputmode);
-//if(!strcmp(outputmode,"BATCH"))
-   //fprintf(stdout,"\nNO_MATCH %s\n",orgquerystring);
-//else
-   //fprintf(stdout,"%s: No match\n",querystring);
+//fprintf(stdout,"NO_MATCH %s\n", outputmode);
+fprintf(stdout,"NO_MATCH %s%s", orgquerystring,linesep);
 return(0);
 }
 
@@ -826,10 +823,10 @@ while(strlen(query) > MAXPEPSIZE)
    if(cnt==0)
      {
      //fprintf(stderr,"pepx_processquery: no match for subquery %s\n",subquery);
-     return(pepx_reportnomatch(outputmode,querystring,orgquerystring));
+     return(pepx_reportnomatch(orgquerystring));
      }
    if((cnt=pepx_merge_with_prev_res(finalres, results, acstring, cnt) == 0))
-     return(pepx_reportnomatch(outputmode,querystring,orgquerystring));     
+     return(pepx_reportnomatch(orgquerystring));     
    }
 //fprintf(stderr,"pepx_processquery last complete subquery OK\n");  
 if(i = strlen(query)) // otherwise we're finished
@@ -847,11 +844,11 @@ if(i = strlen(query)) // otherwise we're finished
    else
      cnt = pepx_search(subquery,idxinfo);
   if(cnt==0)
-    return(pepx_reportnomatch(outputmode,querystring,orgquerystring));     
+    return(pepx_reportnomatch(orgquerystring));     
     //fprintf(stderr,"last subquery %s gave %d matches\n",subquery,cnt);
   cnt = pepx_merge_with_prev_res(finalres, results, acstring, cnt);
   if(cnt == 0)
-    return(pepx_reportnomatch(outputmode,querystring,orgquerystring)); 
+    return(pepx_reportnomatch(orgquerystring)); 
   }
 
 // last subquery done: finish
@@ -903,7 +900,8 @@ if(!strcmp(outputmode,"BATCH"))
 else
   {
   // input from stdin (results are crlf-separated)
-  fprintf(stdout,"\n%s: %d match(s)%s",querystring,cnt,linesep);
+  //fprintf(stdout,"\n%s: %d match(s)%s",querystring,cnt,linesep);
+  fprintf(stdout,"%s%s: %d match(s)%s",linesep,querystring,cnt,linesep);
   for(i=0;i<cnt;i++)
      {
      // Check for coded 10-digit ACs
@@ -1209,7 +1207,7 @@ fprintf(stderr,"- only 1 joker (X) allowed in a given x-mer\n");
 // ---------------- main ---------------------
 int main(int argc, char **argv)
 {
-char *ptr, seqfname[LINELEN]="", command[LINELEN], querystring[8192];
+char *ptr, *peptoken, seqfname[LINELEN]="", command[LINELEN], querystring[8192];
 char query[8192], pepfname[LINELEN]="";
 int i, c;
 int option_index = 0; // getopt_long stores the option index here.
@@ -1375,7 +1373,15 @@ else if(!strncmp(command,"search",6))
     }
   else
      // Just process given query
-     pepx_processquery(querystring);
+     {
+     //pepx_processquery(querystring);
+     peptoken = strtok(querystring, ",");  // there may be several comma-separated peptides 
+     while( peptoken != NULL )
+          {
+          pepx_processquery(peptoken);
+          peptoken = strtok(NULL, ",");  
+	  }
+     }
   }
 else
   {
