@@ -979,7 +979,7 @@ else
 	   if(i)
 	     // close previous iso and entrymatch tag
 	     fprintf(stdout,"]\n},");
-	   fprintf(stdout,"{\n\"entryname\":\"%s\",\n\"isoforms\":[",ac);
+	   fprintf(stdout,"{\n\"entryName\":\"%s\",\n\"isoforms\":[",ac);
 	   strcpy(lastac,ac);
 	   }
 	 else fprintf(stdout,","); 
@@ -998,7 +998,7 @@ else
 	   if(i)
 	     // close previous iso and entrymatch tag
 	     fprintf(stdout,"]\n},");
-	   fprintf(stdout,"{\n\"entryname\":\"%s\",\n\"isoforms\":[",ac);
+	   fprintf(stdout,"{\n\"entryName\":\"%s\",\n\"isoforms\":[",ac);
 	   strcpy(lastac,ac);
 	   }
 	 else fprintf(stdout,","); 
