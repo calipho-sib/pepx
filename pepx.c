@@ -70,7 +70,7 @@ char currISO[ACLEN];
 char outputmode[16];
 char linesep[4] = "\n";
 char envstring[LINELEN];
-char version[] = "1.41";
+char version[] = "1.50";
 // debug/profiling/stats stuff
 int debug;
 int totalbins=0;
@@ -83,6 +83,8 @@ int totalvarcnt = 0;
 int varmisscnt1 = 0, varmisscnt2 = 0, varmisscnt3=0;
 int ignore_variants = 0;
 int IL_merge = 0;
+int json = 0;
+static char jsonBuffer[8192];// weird but alters idxinfo[6] when changed if not static
 char varfolder[LINELEN];
 char indexfolder[LINELEN]=".";
 
@@ -110,7 +112,7 @@ char* code4tenAA(char* currentAC)
 {
 int i, found=0;
 char codedAC[16]="";
-static char* tab[]={"A A0A087","B A0A0B4","C A0A075","D A0A096"};
+static char* tab[]={"A A0A087","B A0A0B4","C A0A075","D A0A096","E A0A0C5", "F A0A0J9"};
 
 //fprintf(stderr,"input: %s\n",currentAC);
 if(!strncmp(currentAC,"P",1))
@@ -185,6 +187,46 @@ for(i=len;i>0;i--)
 return(sseqcode);
 }
 
+// ---------------- pepx_json_header---------------------
+void pepx_json_header(char* title, char* querystring, int modeIL)
+// recapitulates given parameters
+{
+char isList[8] = "";
+
+if(modeIL == -1) strcpy(isList,"[");
+//fprintf(stderr,"pepx_json_header: %s\n",title);
+sprintf(jsonBuffer,"\"%s\":%s{\n",title,isList);
+fputs(jsonBuffer,stdout); // outputs header title
+if(querystring != NULL)
+  {
+  if(modeIL != -1)  
+    sprintf(jsonBuffer,"\"peplist\":\"%s\",\n\"modeIL\": %d\n},",querystring,modeIL);
+  else
+    sprintf(jsonBuffer,"\"peptide\":\"%s\",\n\"entryMatches\":[",querystring);
+  fprintf(stdout,"%s",jsonBuffer);
+  }
+}
+
+// ---------------- pepx_tojson ---------------------
+char* pepx_tojson(char* finalresult)
+{
+int varpos=0;
+char ename[12], iso[16];
+char* dashptr;
+
+//fprintf(stdout,"pepx_tojson receives %s\n",finalresult);
+dashptr=strrchr(finalresult,'-');
+if((dashptr != finalresult + 6) &&  (dashptr != finalresult + 10)) // don't forget 10 digirs
+  // we have a variant pos in the last digits (eg: NX_Q8IWA4-2-121)
+  {
+  varpos = atoi(dashptr + 1);
+  *dashptr = 0; // remove parsed pos from string
+  }
+strcpy(iso,finalresult);
+sprintf(jsonBuffer,"{\n\"isoformName\":\"%s\",\n\"position\":%d\n}",iso, varpos);
+return(jsonBuffer);
+}
+
 // ---------------- pepx_create_variant_files ---------------------
 int pepx_create_variant_files(char* varfolder)
 {
@@ -251,7 +293,8 @@ FILE *NextProtvariants;
 
 if(debug)
   fprintf(stderr,"Building variants for %s\n",currISO);
-if(!strncmp(isoname,"PA",2) || !strncmp(isoname,"PB",2) || !strncmp(isoname,"PC",2))
+if(!strncmp(isoname,"PA",2) || !strncmp(isoname,"PB",2) || !strncmp(isoname,"PC",2) ||
+  !strncmp(isoname,"PD",2) || !strncmp(isoname,"PE",2) || !strncmp(isoname,"PF",2))
   // get around 10-len accs
   {
   strcpy(iso,code4tenAA(isoname));
@@ -521,6 +564,13 @@ int accompare (char *str1, char *str2)
 return (strncmp(str1,str2,6));
 }
 
+/******* rescompare **************************************************/  
+
+int rescompare (char *str1, char *str2)    
+{
+return (strncmp(str1,str2,15));
+}
+
 /******* compare **************************************************/  
 
 int compare (char *str1, char *str2)    
@@ -535,7 +585,10 @@ return (strncmp(str1,currentresult,currentpepsize));
 int pepx_reportnomatch(char* orgquerystring)
 {
 //fprintf(stdout,"NO_MATCH %s\n", outputmode);
-fprintf(stdout,"NO_MATCH %s%s", orgquerystring,linesep);
+if(json)
+  fprintf(stdout,"]}]"); // close empty entrymatches and peptidematches
+else  
+  fprintf(stdout,"NO_MATCH %s%s", orgquerystring,linesep);
 return(0);
 }
 
@@ -752,10 +805,12 @@ return(rescnt);
 int pepx_processquery(char* orgquerystring)
 {
 char query[8192], querystring[8192], nextquery[8192], subquery[MAXPEPSIZE + 1]="", acstring[400000]="", finalres[MAXSEQ][ACLEN+4];
-char *qptr, ac[ACLEN], ac10digits[ACLEN];
+char *qptr, ac[ACLEN], lastac[ACLEN]="", ac10digits[ACLEN];
 int row=0, i, j, k, ac_cnt, cnt, found, varpos;
 
 // TODO: rewrite and iterate one by one AA, or 1rst and last and one by one ?
+if(json)
+   pepx_json_header("peptideMatches",orgquerystring,-1);
 strcpy(query,orgquerystring);
 if(!strcmp(outputmode,"BATCH"))
   // Only first token is the peptide
@@ -850,7 +905,6 @@ if(i = strlen(query)) // otherwise we're finished
   if(cnt == 0)
     return(pepx_reportnomatch(orgquerystring)); 
   }
-
 // last subquery done: finish
 if(!strcmp(matchmode,"ACONLY"))
    // Re-filter without iso ids
@@ -873,6 +927,7 @@ if(!strcmp(matchmode,"ACONLY"))
       strcpy(finalres[i],results[i]);
    }  
    
+// output
 if(!strcmp(outputmode,"BATCH"))
   // input from file (results are comma-separated)
   {
@@ -882,7 +937,8 @@ if(!strcmp(outputmode,"BATCH"))
   else for(i=0;i<cnt;i++)
      {
      // Check for coded 10-digit ACs
-     if(!strncmp(finalres[i],"PA",2) || !strncmp(finalres[i],"PB",2) || !strncmp(finalres[i],"PC",2))
+     if(!strncmp(finalres[i],"PA",2) || !strncmp(finalres[i],"PB",2) || !strncmp(finalres[i],"PC",2) ||
+        !strncmp(finalres[i],"PD",2) || !strncmp(finalres[i],"PE",2) || !strncmp(finalres[i],"PF",2))
        {
        strcpy(ac10digits,code4tenAA(finalres[i]));
        fprintf(stdout,"%s",ac10digits);
@@ -899,24 +955,67 @@ if(!strcmp(outputmode,"BATCH"))
   }
 else
   {
-  // input from stdin (results are crlf-separated)
+  // input from stdin or envstring in web cgi mode (results are crlf-separated)
   //fprintf(stdout,"\n%s: %d match(s)%s",querystring,cnt,linesep);
-  fprintf(stdout,"%s%s: %d match(s)%s",linesep,querystring,cnt,linesep);
-  for(i=0;i<cnt;i++)
+  // Sort results by AC
+  if(cnt > 2)
+    qsort(finalres, cnt, ACLEN+4, rescompare);
+  //for(i=0;i<cnt;i++) fprintf(stdout,"%s\n",finalres[i]);
+  if(!json)
+    fprintf(stdout,"%s%s: %d match(s)%s",linesep,querystring,cnt,linesep);
+  for(i=0;i<cnt;i++) 
      {
      // Check for coded 10-digit ACs
-     if(!strncmp(finalres[i],"PA",2) || !strncmp(finalres[i],"PB",2) || !strncmp(finalres[i],"PC",2))
+     if(!strncmp(finalres[i],"PA",2) || !strncmp(finalres[i],"PB",2) || !strncmp(finalres[i],"PC",2) ||
+        !strncmp(finalres[i],"PD",2) || !strncmp(finalres[i],"PE",2) || !strncmp(finalres[i],"PF",2))
        {
        strcpy(ac10digits,code4tenAA(finalres[i]));
-       fprintf(stdout,"%s%s",ac10digits,linesep);
-      }
-     else  
-       fprintf(stdout,"%s%s",finalres[i],linesep);
+       if(json)
+         {
+	 strcpy(ac,ac10digits);
+         *strchr(ac,'-')=0;
+	 if(strcmp(ac,lastac))
+	   {
+	   if(i)
+	     // close previous iso and entrymatch tag
+	     fprintf(stdout,"]\n},");
+	   fprintf(stdout,"{\n\"entryname\":\"%s\",\n\"isoforms\":[",ac);
+	   strcpy(lastac,ac);
+	   }
+	 else fprintf(stdout,","); 
+	 fprintf(stdout,"%s",pepx_tojson(ac10digits));
+         }
+       else fprintf(stdout,"%s%s",ac10digits,linesep);
+       }
+     else
+        {
+       if(json)
+         {
+	 strcpy(ac,finalres[i]);
+         *strchr(ac,'-')=0;
+	 if(strcmp(ac,lastac))
+	   {
+	   if(i)
+	     // close previous iso and entrymatch tag
+	     fprintf(stdout,"]\n},");
+	   fprintf(stdout,"{\n\"entryname\":\"%s\",\n\"isoforms\":[",ac);
+	   strcpy(lastac,ac);
+	   }
+	 else fprintf(stdout,","); 
+	 fprintf(stdout,"%s",pepx_tojson(finalres[i]));
+	 //fprintf(stderr,"match %s: %s\n",i,finalres[i]);
+         }
+       else fprintf(stdout,"%s%s",finalres[i],linesep);
+       }
      }
-  //if(cnt > 20)
-    fprintf(stdout,"%s: %d match(s)%s",querystring,cnt,linesep);
+    if(json)
+      fprintf(stdout,"]\n}]\n"); // finished, close iso and entrymatch tags tags 
+    else
+      fprintf(stdout,"%s: %d match(s)%s",querystring,cnt,linesep);
   }
-//varmatchescnt = 0;  // reset for next query
+
+if(json)
+  fprintf(stdout,"}]\n"); // close peptidematches
 return(cnt);  
 }
 
@@ -973,7 +1072,6 @@ else
   strcpy(binptr->ac[i],id);
   //if(!strcmp(subseq,"AAAA"))  fprintf(stdout,"%s in %s now at %d\n",subseq,currAC,i);
   }
-//if(!strcmp(subseq,"SRSDNA"))  fprintf(stdout,"%s in %s stored at pos %d in bin\n",subseq,currAC,i);
 //fprintf(stderr,"pepx_indexsubseq end\n");
 }
 
@@ -1125,6 +1223,7 @@ while(fgets(buf,MAXSEQSIZE,in))
       *strchr(currISO,' ') = 0;
     if(!strncmp(currISO,"A0A0",4))
       // 10 digit AC, trick it and remember only significant digits in a unique 6-digit length format (there is no real AC starting with P[A-Z]
+      // eg: A0A087WTH1 -> PAWTH1
       {
       //fprintf(stderr,"%s -> ",currISO);
       strcpy(shortenedAC,code4tenAA(currISO));
@@ -1191,7 +1290,7 @@ if(!strcmp(mode,"ARGS"))
   fprintf(stderr,"--help (short=-h) to show this help\n");
   fprintf(stderr,"--index-folder (short=-x) to specify an index folder (default is .)\n");
   fprintf(stderr,"--variant-folder (short=-w) to specify a folder for json variants (required for build command when ignore-variants flag is not set)\n");
-  //fprintf(stderr,"--rest-url (short=-r) REST server to retrieve json variants when variant folder is empty (for 1rst build with a given variant folder)\n");
+  fprintf(stderr,"--json output in json format\n");
   fprintf(stderr,"--peptide-file (short=-p) a file with peptides to search (1 peptide/line, if not provided peptides will be read from stdin)\n");
   fprintf(stderr,"--ignore-variants to build indexes not considering variants\n");
   fprintf(stderr,"--IL to build indexes merging I and L\n");
@@ -1220,10 +1319,10 @@ static struct option long_options[] = {
                {"noiso",   no_argument,       0, 'n'},
                {"help",   no_argument,       0, 'h'},
                {"version",   no_argument,       0, 'v'},
+               {"json",   no_argument,       &json, 1},
                {"build", required_argument, 0, 'b'},
                {"peptide-file", required_argument, 0, 'p'},
                {"variant-folder",  required_argument, 0, 'w'},
-//               {"rest-url",  required_argument, 0, 'r'},
                {"index-folder",required_argument, 0, 'x'},
                {0, 0, 0, 0}
              };
@@ -1253,6 +1352,10 @@ if(argc < 2)
    if(ptr=strstr(envstring,"=IL"))
       // IL-merged indexes
       IL_merge = 1;
+   if(ptr=strstr(envstring,"=json"))
+      // output will be in json
+      json = 1;
+   
    }
  else
    {
@@ -1306,10 +1409,6 @@ else
                strcpy(varfolder,optarg);
                break;
      
-             //case 'r':
-               //strcpy(RESTserver, optarg);
-               //break;
-     
              case 'x':
                strcpy(indexfolder, optarg);
                break;
@@ -1349,7 +1448,8 @@ else if(!strncmp(command,"search",6))
     strcpy(querystring,argv[optind]);
   else if(strlen(envstring) == 0)
     strcpy(querystring,"BATCH");
-  printf("Searching for %s, indexes at %s\n",querystring,indexfolder);
+  if(!json)
+     printf("Searching for %s, indexes at %s\n",querystring,indexfolder);
   //exit(0);
   pepx_loadall();
   if(!strcmp(querystring,"INTERACTIVE") || !strcmp(querystring,"BATCH"))
@@ -1372,15 +1472,23 @@ else if(!strncmp(command,"search",6))
     while(TRUE);
     }
   else
-     // Just process given query
+     // Just process given query(ies)
      {
      //pepx_processquery(querystring);
+     if(json)
+       {
+       fprintf(stdout,"{\n"); // opens json stream
+       pepx_json_header("params",querystring,IL_merge);
+       }
      peptoken = strtok(querystring, ",");  // there may be several comma-separated peptides 
      while( peptoken != NULL )
           {
           pepx_processquery(peptoken);
-          peptoken = strtok(NULL, ",");  
+          peptoken = strtok(NULL, ",");
+          if(json && (peptoken != NULL)) // prepare next peptidematches
+	    fprintf(stdout,",\n");
 	  }
+     if(json) fprintf(stdout,"\n}\n"); // close json object	  
      }
   }
 else
