@@ -578,7 +578,7 @@ int pepx_reportnomatch(char* orgquerystring)
 {
 //fprintf(stdout,"NO_MATCH %s\n", outputmode);
 if(json)
-  fprintf(stdout,"]"); // close empty entrymatches
+  fprintf(stdout,"]\n}"); // close empty entrymatches
 else  
   fprintf(stdout,"NO_MATCH %s%s", orgquerystring,linesep);
 return(0);
