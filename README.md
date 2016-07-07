@@ -1,7 +1,12 @@
-pepx
-====
+# neXtProt - The knowledge resource on human proteins
 
-Peptide matcher across nextprot entries and variants
+This is a code repository for the SIB - Swiss Institute of Bioinformatics CALIPHO group neXtProt project
+
+See: http://www.nextprot.org/
+
+# pepx
+
+Peptide matcher across neXtProt entries and variants
 
 ## To build the application
 
