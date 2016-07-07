@@ -321,7 +321,7 @@ while(fgets(buf,LINELEN,NextProtvariants))
        skipvar = 0;
        continue;
        }
-     if((fpos != lpos))
+     if((fpos != lpos)) // not a simple snp
        {
        if((strlen(orgAA) == 2) && (strlen(varAA) == 2) && orgAA[0] == varAA[0])// like A7XYQ1(180-181)
 	   // Store variant at 2nd pos
@@ -640,10 +640,19 @@ else // Check the match did exist for previous peps
        {
        strncpy(prevmatch,matchptr,ACLEN);
        *strchr(prevmatch,',')=0;
-       //fprintf(stderr,"isovar: %s\n",prevmatch);
+       //fprintf(stderr,"isovar: %s, prevmatch: %s\n",isovar,prevmatch);
        if(strrchr(prevmatch,'-') == prevmatch + 6)
          // replace simple match by new variant match
          strcpy(endres[j++],isovar);
+       else if(strstr(prevmatch,isoonly))
+	 // reconduct previous variant pos
+         {
+	 // P15085-1-169,Q8WXQ8-1,Q8WXQ8-1-191,Q8WXQ8-1-193,Q8WXQ8-2,Q8WXQ8-2-191,Q8WXQ8-2-193,Q8WXQ8-3,Q8WXQ8-3-191,Q8WXQ8-3-193 HPAIWIDTGIHSR
+         // We must arrange this...
+	 // Q08648-4-72,Q6PDA7-2 TPPYQGDVPLGIR
+	 strcpy(endres[j++],prevmatch);
+         }
+       //else fprintf(stderr,"%s not added to endres\n\n",isovar);
        }
      *isovar = 0;  
      }
@@ -651,7 +660,7 @@ else // Check the match did exist for previous peps
   if(j)  
    // regenerate actring
    {
-   //fprintf(stderr,"regenerating ACstring\n");
+   //fprintf(stderr,"j equals %d, regenerating ACstring\n",j);
    *acstr = 0;
    for(i=0;i<j;i++)
       {
@@ -790,6 +799,7 @@ while(fgets(acholder,ACLEN+1,ffh))
        break;
        }
      }
+//fprintf(stderr,"\nReturning %d matches\n",rescnt);     
 return(rescnt);
 }
 
@@ -994,8 +1004,9 @@ if(i = strlen(query)) // otherwise we're finished
      cnt = pepx_search(subquery,idxinfo);
   if(cnt==0)
     return(pepx_reportnomatch(orgquerystring));     
-    //fprintf(stderr,"last subquery %s gave %d matches\n",subquery,cnt);
+  //fprintf(stderr,"last subquery %s gave %d matches\n",subquery,cnt);
   cnt = pepx_merge_with_prev_res(finalres, results, acstring, cnt);
+  //fprintf(stderr,"last merge gave %d matches\n",cnt);
   if(cnt == 0)
     return(pepx_reportnomatch(orgquerystring)); 
   }
