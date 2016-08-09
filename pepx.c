@@ -27,6 +27,7 @@
 #define MAXPEPSIZE 6
 // Allowing 7 implies adapting BINSIZE t0 low value in 7-mers (memory pbs)
 #define SILENT 1
+#define INDEX2WIDTH 12
 #ifndef max
 	#define max( a, b ) ( ((a) > (b)) ? (a) : (b) )
 #endif
@@ -70,7 +71,7 @@ char currISO[ACLEN];
 char outputmode[16];
 char linesep[4] = "\n";
 char envstring[LINELEN];
-char version[] = "1.50";
+char version[] = "1.51";
 // debug/profiling/stats stuff
 int debug;
 int totalbins=0;
@@ -394,7 +395,7 @@ for(i=MINPEPSIZE; i<= MAXPEPSIZE;i++)
      sprintf(fname,"%spepxIL%d.idx",idxpath,i);
    else  
      sprintf(fname,"%spepx%d.idx",idxpath,i);
-   if((idx=fopen(fname,"r"))==NULL)
+    if((idx=fopen(fname,"r"))==NULL)
      {
      perror(fname);
      exit(2);
@@ -412,7 +413,7 @@ for(i=MINPEPSIZE; i<= MAXPEPSIZE;i++)
      }
    fseek(idx,0,SEEK_END);
    filelen = ftell(idx);
-   pepcnt = filelen/(i+11);     
+   pepcnt = filelen/(i+INDEX2WIDTH);     
    //printf("%d-mers size: %d bytes -> %d elts\n",i,filelen,pepcnt);
    if(IL_merge)
      {
@@ -469,7 +470,7 @@ if((out2=fopen(fname,"w"))==NULL)
  exit(2);
  }
 // index header line (1rst pep line must not be at pos 0 for new index schema)
-for(i=0;i<pepsize+10;i++)
+for(i=0;i<pepsize+INDEX2WIDTH-1;i++)
    fprintf(out2,"0");
 fprintf(out2,"\n");
 
@@ -486,7 +487,7 @@ for(sseqcode=0; sseqcode<maxcode; sseqcode++)
      if(fprintf(out,"%s\n",subseq) <= 0)
        fprintf(stderr,"writing acs for %s failed\n",subseq);
      // write secundary index
-     fprintf(out2,"%s %9u\n",subseq, idxpos);
+     fprintf(out2,"%s %10u\n",subseq, idxpos);
      ac_cnt = iso_cnt = 0;
      usscnt++;
      while(binptr->nextbinptr != NULL)
@@ -549,13 +550,6 @@ for(i=MINPEPSIZE; i<= MAXPEPSIZE;i++)
    }
 }
 
-/******* accompare **************************************************/  
-
-int accompare (char *str1, char *str2)    
-{
-return (strncmp(str1,str2,6));
-}
-
 /******* rescompare **************************************************/  
 
 int rescompare (char *str1, char *str2)    
@@ -563,12 +557,13 @@ int rescompare (char *str1, char *str2)
 return (strncmp(str1,str2,ACLEN));
 }
 
-/******* compare **************************************************/  
+/******* pepcompare **************************************************/  
 
-int compare (char *str1, char *str2)    
-{  
+int pepcompare (char *str1, char *str2)    
+{ 
 fseek(currentindex,(int)str2,0);
 fgets(currentresult,32,currentindex);
+//fprintf(stderr,"current idx2 file pos:  %li, fseek returned %d\n",(int)str2,fret);
 //fprintf(stderr,"res: %s\n",currentresult);
 return (strncmp(str1,currentresult,currentpepsize));
 }
@@ -648,7 +643,7 @@ else // Check the match did exist for previous peps
 	 // reconduct previous variant pos
          {
 	 // P15085-1-169,Q8WXQ8-1,Q8WXQ8-1-191,Q8WXQ8-1-193,Q8WXQ8-2,Q8WXQ8-2-191,Q8WXQ8-2-193,Q8WXQ8-3,Q8WXQ8-3-191,Q8WXQ8-3-193 HPAIWIDTGIHSR
-         // We must arrange this...
+         // Occurs when we have I->L variants in IL modeWe must arrange this...
 	 // Q08648-4-72,Q6PDA7-2 TPPYQGDVPLGIR
 	 strcpy(endres[j++],prevmatch);
          }
@@ -716,7 +711,7 @@ else if((jcnt == 1) && (jpos != 0) && (jpos != pepsize-1))
      strncat(newquery,&aarevcode[i],1); // Todo: check if this works for I/L
      strcat(newquery,querystring + jpos + 1);
      //fprintf(stderr,"\nnewquery: %s\n",newquery);
-     if(bsearch(newquery,NULL,idx[pepsize].elemcnt,pepsize+11,compare))
+     if(bsearch(newquery,NULL,idx[pepsize].elemcnt,pepsize+INDEX2WIDTH,pepcompare))
        {
        fpos = atoi(currentresult + pepsize);
        ffh = idx[pepsize].ffh;
@@ -767,7 +762,7 @@ else if (jpos == pepsize-1)
   }
   
 // No jokers
-if(!bsearch(querystring,NULL,idx[pepsize].elemcnt,pepsize+11,compare))
+if(!bsearch(querystring,NULL,idx[pepsize].elemcnt,pepsize+INDEX2WIDTH,pepcompare))
   // No match
   {
   //fprintf(stderr,"\n%s: not found in %s\n",querystring,idx==idxinfoIL?"ILindex":"BaseIndex");  
@@ -1084,6 +1079,7 @@ for(i=0;i<seqlen-MINPEPSIZE;i++)
    {
    // C-ters
    //printf("indexing at %d/%d\n",i,seqlen);
+   //for(pepsize=MINPEPSIZE;pepsize<=MAXPEPSIZE;pepsize++)
    for(pepsize=MINPEPSIZE;pepsize<=MAXPEPSIZE;pepsize++)
       {
       if(seqlen-i < pepsize)
