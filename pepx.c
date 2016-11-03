@@ -113,7 +113,7 @@ char* code4tenAA(char* currentAC)
 {
 int i, found=0;
 static char codedAC[16]="";
-static char* tab[]={"A A0A087","B A0A0B4","C A0A075","D A0A096","E A0A0C5", "F A0A0J9"};
+static char* tab[]={"A A0A087","B A0A0B4","C A0A075","D A0A096","E A0A0C5", "F A0A0J9","G A0A0C4", "H A0A0A0"};
 
 if(!strncmp(currentAC,"P",1))
   // convert back to 10 digit AC
