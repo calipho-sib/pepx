@@ -71,7 +71,7 @@ char currISO[ACLEN];
 char outputmode[16];
 char linesep[4] = "\n";
 char envstring[LINELEN];
-char version[] = "1.51";
+char version[] = "1.52";
 // debug/profiling/stats stuff
 int debug;
 int totalbins=0;
@@ -241,7 +241,8 @@ while(fgets(buf,LINELEN,varmaster))
        continue;
      *dest=0; //To avoid that last value is keeped when scaning a miss variant (dest empty)
      sscanf(buf,"%s %s %d %d %s %s\n",nxid, annotId, &startpos,&endpos,org,dest);
-     //fprintf(stderr,"%s\n",buf);
+     //fprintf(stderr,"read %s\n",buf);
+     //fprintf(stderr,"nxid: %s\n",nxid);
      strcpy(ac,nxid+3);
      if(strlen(lastac) && strcmp(ac,lastac))
        // write previous iso record 
@@ -346,8 +347,10 @@ while(fgets(buf,LINELEN,NextProtvariants))
 	   }
 	 } 
        else 
-	 // Store variant
 	 {
+	 if(IL_merge && ((orgAA == 'I' && varAA == 'L') || (orgAA == 'L' && varAA == 'I'))) // In IL mode variants I->L or L->I would just add noise and are ignored
+	   continue;
+	 // Store variant
 	 if(strlen(varAA) == 0)
 	   // code for 'Missing' AA
 	   {
@@ -583,7 +586,7 @@ return(0);
 int pepx_merge_with_prev_res(char endres[MAXSEQ][ACLEN+4], char curres[MAXSEQ][ACLEN], char* acstr, int rescnt)
 {
 char isoonly[ACLEN], isovar[ACLEN]="", prevmatch[ACLEN]="", *dashptr, *matchptr;  
-int i, j, prevmatchvar;
+int i, j, prevmatchvar, dupcnt=0;
 
 //fprintf(stderr,"acstring: %s\n",acstr);
 j = rescnt;
@@ -593,10 +596,17 @@ if(strlen(acstr) == 0)
   //fprintf(stderr,"\nfirst 6-mer: %d hits\n",j);  
   for(i=0;i<rescnt;i++)
      {
+     if(i && !strcmp(curres[i],curres[i-1]))
+     {
+     dupcnt++;
+     continue; // fprintf(stderr,"\ndup: %s\n",curres[i]);, TODO: investigate why it occurs, eg: ASQSIS
+     }
+     //fprintf(stderr,"%d: %s\n",i,curres[i]);
      strcpy(endres[i],curres[i]);
      strcat(acstr,curres[i]);
      strcat(acstr,",");
      }
+   j = rescnt - dupcnt;  
   }   
 else // Check the match did exist for previous peps
   {
