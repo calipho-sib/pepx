@@ -71,7 +71,7 @@ char currISO[ACLEN];
 char outputmode[16];
 char linesep[4] = "\n";
 char envstring[LINELEN];
-char version[] = "1.52";
+char version[] = "1.53";
 // debug/profiling/stats stuff
 int debug;
 int totalbins=0;
@@ -120,7 +120,7 @@ if(!strncmp(currentAC,"P",1))
   {
   strncpy(codedAC,currentAC+1,1);
   codedAC[1] = 0;
-  for(i=0;i<sizeof(tab);i++)
+  for(i=0;i<sizeof(tab)/8;i++)
      if(!strncmp(tab[i],codedAC,1)) 
       {
       found=1;
@@ -141,13 +141,13 @@ else
   {
   strncpy(codedAC,currentAC,6);
   codedAC[6]=0;
-  for(i=0;i<sizeof(tab);i++)
+  for(i=0;i<sizeof(tab)/8;i++)
     if(strstr(tab[i],codedAC))
       {
       found=1;
       break;
       }
-  if(found)
+   if(found)
     {
     strcpy(codedAC,"P");
     strncat(codedAC,tab[i],1);
@@ -287,8 +287,7 @@ FILE *NextProtvariants;
 
 if(debug)
   fprintf(stderr,"Building variants for %s\n",currISO);
-if(!strncmp(isoname,"PA",2) || !strncmp(isoname,"PB",2) || !strncmp(isoname,"PC",2) ||
-  !strncmp(isoname,"PD",2) || !strncmp(isoname,"PE",2) || !strncmp(isoname,"PF",2))
+if(is10digits(isoname)) 
   // get around 10-len accs
   {
   strcpy(iso,code4tenAA(isoname));
@@ -811,8 +810,9 @@ return(rescnt);
 int is10digits(char* match)
 {
 if(!strncmp(match,"PA",2) || !strncmp(match,"PB",2) || !strncmp(match,"PC",2) ||
-   !strncmp(match,"PD",2) || !strncmp(match,"PE",2) || !strncmp(match,"PF",2))
-  return(1);
+   !strncmp(match,"PD",2) || !strncmp(match,"PE",2) || !strncmp(match,"PF",2) ||
+   !strncmp(match,"PG",2) || !strncmp(match,"PH",2) || !strncmp(match,"PI",2))
+ return(1);
 return(0);  
 }
 
