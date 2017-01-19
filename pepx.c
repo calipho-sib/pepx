@@ -113,7 +113,7 @@ char* code4tenAA(char* currentAC)
 {
 int i, found=0;
 static char codedAC[16]="";
-static char* tab[]={"A A0A087","B A0A0B4","C A0A075","D A0A096","E A0A0C5", "F A0A0J9","G A0A0C4", "H A0A0A0"};
+static char* tab[]={"A A0A087","B A0A0B4","C A0A075","D A0A096","E A0A0C5", "F A0A0J9","G A0A0C4", "H A0A0A0", "I A0A0G2"};
 
 if(!strncmp(currentAC,"P",1))
   // convert back to 10 digit AC
@@ -1242,7 +1242,7 @@ while(fgets(buf,MAXSEQSIZE,in))
       }
     strncpy(currAC,currISO,6);
     currAC[6]=0;
-    //if(seqcnt > 38000)      fprintf(stderr,"%s\n",currISO); //debug=TRUE;
+    //if(seqcnt > 30000)      fprintf(stderr,"%s\n",currISO); //debug=TRUE;
     strcpy(masterseq,strrchr(buf,'\t')+1);
     *strrchr(masterseq,'\n')=0;
     seqlen = strlen(masterseq);
