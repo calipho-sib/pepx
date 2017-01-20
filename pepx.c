@@ -13,6 +13,8 @@
 #define TRUE  1
 #define MAXSEQ 32768
 // MAXSEQ max number of results for a query
+#define MAXHEADSIZE 1500000
+// MAXHEADSIZE size of titin longest isoform header line in PEFF
 #define MAXSEQSIZE 36500
 // MAXSEQSIZE = size of titin longest isoform
 #define MAXISO 100
@@ -85,6 +87,7 @@ int varmisscnt1 = 0, varmisscnt2 = 0, varmisscnt3=0;
 int ignore_variants = 0;
 int IL_merge = 0;
 int json = 0;
+int PEFFinput = 0;
 static char jsonBuffer[8192];// weird but alters idxinfo[6] when changed if not static
 char varfolder[LINELEN];
 char indexfolder[LINELEN]=".";
@@ -1084,7 +1087,7 @@ char subseq[MAXPEPSIZE+1], varsubseq[MAXPEPSIZE+1], variant[MAXVARINPEP][MAXPEPS
 int i, k, varnb, too_many_variants = 0, seqlen, repeat_offset, varindex=1, pepsize;
 
 seqlen = strlen(seq);
-if(debug) fprintf(stderr,"indexing %s: %s\n",currISO,seq);
+if(debug) fprintf(stderr,"indexing %s (%d): %s\n",currISO,seqlen,seq);
 for(i=0;i<seqlen-MINPEPSIZE;i++)
    {
    // C-ters
@@ -1181,14 +1184,44 @@ for(i=0;i<seqlen-MINPEPSIZE;i++)
    }
 }
 
+// ----------------pepx_getPEFFentry ----------------
+void pepx_getPEFFentry(char* iso, char* buf, FILE *infile)
+{
+char *ptr, fastabuf[64];
+int seqlen;
+
+strncpy(iso,buf+8,15);
+*strchr(iso,' ') = 0;
+//fprintf(stderr,"in pepx_getPEFFentry: %s\n",iso);
+ptr = strstr(buf,"Length=");
+if(ptr)
+  seqlen = atoi(ptr+7);
+else
+  {fprintf(stderr,"No sequence length info for %s\n",iso); exit(111);}
+*buf = 0;
+while(seqlen > 0)
+  {
+   fgets(fastabuf,64,infile);
+   *strchr(fastabuf,'\n')=0;
+   strcat(buf,fastabuf);
+   seqlen -= strlen(fastabuf);
+   }
+if(seqlen == 0)  
+  strcat(buf,"\n"); 
+// for some weird reason it finds an extra cr in the last fasta line ! 
+}
+
 // ---------------- pepx_build ---------------------
 void pepx_build(char* seqfilename)
 {
 FILE *in, *varcheck;
-char fname[LINELEN], varaa, *ptr, *varptr, varbuf[16], buf[MAXSEQSIZE], shortenedAC[16];
+//char fname[LINELEN], varaa, *ptr, *varptr, varbuf[16], buf[MAXSEQSIZE], shortenedAC[16];
+char fname[LINELEN], varaa, *ptr, *varptr, varbuf[16], shortenedAC[16];
+char buf[MAXHEADSIZE]; // header PEFF line for titin can be over 1.3 Mb
 int seqcnt=0, currVarcnt, i, seqlen, maxvar=0;
 
 if((in=fopen(seqfilename,"r"))==NULL)
+  // Sequence file name doesn't exist
  {
  perror(seqfilename);
  exit(2);
@@ -1217,13 +1250,29 @@ fgets(buf,LINELEN,in); // Skip header line if any
 if(strstr(buf,"NX_"))
   // There was no header
   rewind(in);
-while(fgets(buf,MAXSEQSIZE,in))
+else if(buf[0]=='#')
+      {
+      for(i=0;i<9;i++)
+        // PEFF file starts with 10 #-commented description lines
+        fgets(buf,MAXHEADSIZE,in);
+      PEFFinput = 1;
+      }
+
+//while(fgets(buf,MAXSEQSIZE,in))
+while(fgets(buf,MAXHEADSIZE,in))
     {
-    strncpy(currISO,buf+3,12);
-    if(strchr(currISO,'\t'))
+    //if(!strncmp(buf,">nxp:NX_",8)) // We're parsing the PEFF file
+    if(PEFFinput) // We're parsing the PEFF file
+      pepx_getPEFFentry(currISO, buf, in);
+    else // Parsing from prerelease data
+     {
+     strncpy(currISO,buf+3,12);
+     if(strchr(currISO,'\t'))
       *strchr(currISO,'\t') = 0;
-    if(strchr(currISO,' '))
+     if(strchr(currISO,' '))
       *strchr(currISO,' ') = 0;
+     }
+     
     if(!strncmp(currISO,"A0A0",4))
       // 10 digit AC, trick it and remember only significant digits in a unique 6-digit length format (there is no real AC starting with P[A-Z]
       // eg: A0A087WTH1 -> PAWTH1
@@ -1240,12 +1289,18 @@ while(fgets(buf,MAXSEQSIZE,in))
         strcpy(currISO,shortenedAC);
       //fprintf(stderr,"%s\n",shortenedAC);
       }
+
     strncpy(currAC,currISO,6);
     currAC[6]=0;
     //if(seqcnt > 30000)      fprintf(stderr,"%s\n",currISO); //debug=TRUE;
-    strcpy(masterseq,strrchr(buf,'\t')+1);
-    *strrchr(masterseq,'\n')=0;
+    if(PEFFinput)
+      strcpy(masterseq,buf);
+    else
+      strcpy(masterseq,strrchr(buf,'\t')+1);
+    if(!isalpha(masterseq[strlen(masterseq)-1])) masterseq[strlen(masterseq)-1] = 0;
+    //*strrchr(masterseq,'\n')=0; won't work in PEFF scan for mysterious reason
     seqlen = strlen(masterseq);
+    //fprintf(stderr,"%s (%d)\n",currISO,seqlen);
     if(IL_merge)
       // Replace all I/L with J
       for(i=0;i<seqlen;i++)
@@ -1267,13 +1322,11 @@ while(fgets(buf,MAXSEQSIZE,in))
     else
        currVarcnt = 0;
     totalvarcnt += currVarcnt;
+    //debug=TRUE;
     pepx_indexseq(masterseq,currVarcnt);
     seqcnt++;
     if((seqcnt % 1000) == 0)
-      {
       fprintf(stderr,"Processing seq %d...\n",seqcnt);
-      //display_mallinfo();
-      }
     }
 fprintf(stderr,"%d sequences indexed (%d simple variants, %d/%d/%d 1-miss variants)\n",seqcnt,totalvarcnt,varmisscnt1, varmisscnt2, varmisscnt3);
 fprintf(stderr,"%d varindex overflows\n",varindex_overflow_cnt);
