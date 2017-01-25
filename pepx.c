@@ -87,36 +87,20 @@ int varmisscnt1 = 0, varmisscnt2 = 0, varmisscnt3=0;
 int ignore_variants = 0;
 int IL_merge = 0;
 int json = 0;
-int PEFFinput = 0;
+int FASTAinput = 0;
 static char jsonBuffer[8192];// weird but alters idxinfo[6] when changed if not static
 char varfolder[LINELEN];
 char indexfolder[LINELEN]=".";
-
-// ---------------- display_mallinfo ---------------------
-static void  display_mallinfo()
-{
-struct mallinfo mi;
-
-mi = mallinfo();
-// for debuging purpose, old implementation: overflows after 2Gb
-printf("Total non-mmapped bytes (arena):       %d\n", mi.arena);
-printf("# of free chunks (ordblks):            %d\n", mi.ordblks);
-printf("# of free fastbin blocks (smblks):     %d\n", mi.smblks);
-printf("# of mapped regions (hblks):           %d\n", mi.hblks);
-printf("Bytes in mapped regions (hblkhd):      %d\n", mi.hblkhd);
-printf("Max. total allocated space (usmblks):  %d\n", mi.usmblks);
-printf("Free bytes held in fastbins (fsmblks): %d\n", mi.fsmblks);
-printf("Total allocated space (uordblks):      %d\n", mi.uordblks);
-printf("Total free space (fordblks):           %d\n", mi.fordblks);
-printf("Topmost releasable block (keepcost):   %d\n", mi.keepcost);
-}
 
 // ---------------- code4tenAA ---------------------
 char* code4tenAA(char* currentAC)
 {
 int i, found=0;
 static char codedAC[16]="";
-static char* tab[]={"A A0A087","B A0A0B4","C A0A075","D A0A096","E A0A0C5", "F A0A0J9","G A0A0C4", "H A0A0A0", "I A0A0G2"};
+//static char* tab[]={"A A0A087","B A0A0B4","C A0A075","D A0A096","E A0A0C5", "F A0A0J9","G A0A0C4", "H A0A0A0", "I A0A0G2"};
+static char* tab[]={"A A0A024","B A0A044","C A0A067","D A0A075","E A0A087","F A0A088","G A0A096","H A0A0A0","I A0A0A6","J A0A0B4","K A0A0C3",
+          "L A0A0C4","M A0A0C5","N A0A0D2","O A0A0D5","P A0A0D9","Q A0A0E3","R A0A0G2","S A0A0H2","T A0A0J9","U A0A0K0","V A0A0M3","W A0A0N4",
+          "X A0A0R4","Y A0A0S2","Z A0A0U1","a A0A0U5","b A0A0X1","c A0A140","d A0A182","e A0A1B0","f A0A1C7","g A0A1D5"};
 
 if(!strncmp(currentAC,"P",1))
   // convert back to 10 digit AC
@@ -317,7 +301,7 @@ while(fgets(buf,LINELEN,NextProtvariants))
         // No variants on Met-1 allowed // No stop variants allowed
        {
        if((strlen(varAA) == 1 && orgAA[strlen(varAA)-1] == varAA[0]) || strlen(varAA) == 0)
-	 varmisscnt3++;
+	     varmisscnt3++;
        skipvar = 1;
        }
      if(skipvar)
@@ -812,9 +796,10 @@ return(rescnt);
 
 int is10digits(char* match)
 {
-if(!strncmp(match,"PA",2) || !strncmp(match,"PB",2) || !strncmp(match,"PC",2) ||
+if(match[0] == 'P' && isalpha(match[1]))  
+/*if(!strncmp(match,"PA",2) || !strncmp(match,"PB",2) || !strncmp(match,"PC",2) ||
    !strncmp(match,"PD",2) || !strncmp(match,"PE",2) || !strncmp(match,"PF",2) ||
-   !strncmp(match,"PG",2) || !strncmp(match,"PH",2) || !strncmp(match,"PI",2))
+   !strncmp(match,"PG",2) || !strncmp(match,"PH",2) || !strncmp(match,"PI",2)) */
  return(1);
 return(0);  
 }
@@ -1184,41 +1169,54 @@ for(i=0;i<seqlen-MINPEPSIZE;i++)
    }
 }
 
-// ----------------pepx_getPEFFentry ----------------
-void pepx_getPEFFentry(char* iso, char* buf, FILE *infile)
+// ----------------pepx_getFASTAentry ----------------
+void pepx_getFASTAentry(char* iso, char* buf, FILE *infile, int* PEFFvarcnt)
 {
 char *ptr, fastabuf[64];
-int seqlen;
-
-strncpy(iso,buf+8,15);
-*strchr(iso,' ') = 0;
-//fprintf(stderr,"in pepx_getPEFFentry: %s\n",iso);
-ptr = strstr(buf,"Length=");
-if(ptr)
-  seqlen = atoi(ptr+7);
-else
-  {fprintf(stderr,"No sequence length info for %s\n",iso); exit(111);}
-*buf = 0;
-while(seqlen > 0)
+int seqlen, varcnt, offset;
+//fprintf(stderr,"start pepx_getFASTAentry\n");
+if(!strncmp(buf,">nxp:",5)) // NetProt peff
   {
-   fgets(fastabuf,64,infile);
+  strncpy(iso,buf+8,15);
+  *strchr(iso,' ') = 0;
+  }
+ else // tr fasta
+  {
+  strncpy(iso,buf+4,15);
+  *strchr(iso,'|') = 0;
+  strcat(iso,"-1"); // Add an iso id
+  }
+
+*buf = 0; // Reset buf to receive sequence
+while(fgets(fastabuf,64,infile))
+   {
+   if(fastabuf[0] == '>') // we reached next header line
+      {
+      if(!strrchr(buf,"\n")) 
+        strcat(buf,"\n"); 
+      if(strchr(fastabuf,'\n'))
+        offset = -strlen(fastabuf);
+      else
+        offset = -63;
+      //fprintf(stderr,"rewinding with offset %d\n",offset);
+      fseek(infile,offset,SEEK_CUR); // rewind line
+      return; 
+      }
    *strchr(fastabuf,'\n')=0;
    strcat(buf,fastabuf);
-   seqlen -= strlen(fastabuf);
    }
-if(seqlen == 0)  
-  strcat(buf,"\n"); 
-// for some weird reason it finds an extra cr in the last fasta line ! 
-}
+
+ if(!strrchr(buf,"\n"))  
+  strcat(buf,"\n");  
+ }
 
 // ---------------- pepx_build ---------------------
 void pepx_build(char* seqfilename)
 {
 FILE *in, *varcheck;
-//char fname[LINELEN], varaa, *ptr, *varptr, varbuf[16], buf[MAXSEQSIZE], shortenedAC[16];
 char fname[LINELEN], varaa, *ptr, *varptr, varbuf[16], shortenedAC[16];
 char buf[MAXHEADSIZE]; // header PEFF line for titin can be over 1.3 Mb
-int seqcnt=0, currVarcnt, i, seqlen, maxvar=0;
+int seqcnt=0, currVarcnt, i, seqlen, maxvar=0, PEFFvarcnt;
 
 if((in=fopen(seqfilename,"r"))==NULL)
   // Sequence file name doesn't exist
@@ -1247,23 +1245,31 @@ if(IL_merge)
   fprintf(stdout,"Indexing with I/L merged...\n");
 pepx_initindexes();
 fgets(buf,LINELEN,in); // Skip header line if any
-if(strstr(buf,"NX_"))
+if(strstr(buf,"NX_") || buf[0] == '>')
+  {
   // There was no header
   rewind(in);
+  if(buf[0] == '>')
+    FASTAinput = 1;
+  }
 else if(buf[0]=='#')
       {
       for(i=0;i<9;i++)
         // PEFF file starts with 10 #-commented description lines
         fgets(buf,MAXHEADSIZE,in);
-      PEFFinput = 1;
+      FASTAinput = 1;
       }
 
-//while(fgets(buf,MAXSEQSIZE,in))
+if(FASTAinput && !ignore_variants)
+  {
+  fprintf(stderr,"No variants allowed with FASTA input, please relaunch with command flag '--ignore-variants'\n");
+  exit(555);
+  }
+
 while(fgets(buf,MAXHEADSIZE,in))
-    {
-    //if(!strncmp(buf,">nxp:NX_",8)) // We're parsing the PEFF file
-    if(PEFFinput) // We're parsing the PEFF file
-      pepx_getPEFFentry(currISO, buf, in);
+    {//fprintf(stderr,"main loop at %d: %s\n",ftell(in),buf);
+    if(FASTAinput) // We're parsing the PEFF file
+      pepx_getFASTAentry(currISO, buf, in, &PEFFvarcnt);
     else // Parsing from prerelease data
      {
      strncpy(currISO,buf+3,12);
@@ -1272,8 +1278,8 @@ while(fgets(buf,MAXHEADSIZE,in))
      if(strchr(currISO,' '))
       *strchr(currISO,' ') = 0;
      }
-     
-    if(!strncmp(currISO,"A0A0",4))
+
+    if(strlen(currISO) > 10 && (!strncmp(currISO,"A0A0",4) || !strncmp(currISO,"A0A1",4)))
       // 10 digit AC, trick it and remember only significant digits in a unique 6-digit length format (there is no real AC starting with P[A-Z]
       // eg: A0A087WTH1 -> PAWTH1
       {
@@ -1293,12 +1299,12 @@ while(fgets(buf,MAXHEADSIZE,in))
     strncpy(currAC,currISO,6);
     currAC[6]=0;
     //if(seqcnt > 30000)      fprintf(stderr,"%s\n",currISO); //debug=TRUE;
-    if(PEFFinput)
+    if(FASTAinput)
       strcpy(masterseq,buf);
     else
       strcpy(masterseq,strrchr(buf,'\t')+1);
-    if(!isalpha(masterseq[strlen(masterseq)-1])) masterseq[strlen(masterseq)-1] = 0;
-    //*strrchr(masterseq,'\n')=0; won't work in PEFF scan for mysterious reason
+    while(!isalpha(masterseq[strlen(masterseq)-1])) masterseq[strlen(masterseq)-1] = 0;
+    //*strchr(masterseq,'\n')=0; //won't work in PEFF scan for mysterious reason
     seqlen = strlen(masterseq);
     //fprintf(stderr,"%s (%d)\n",currISO,seqlen);
     if(IL_merge)
@@ -1315,10 +1321,15 @@ while(fgets(buf,MAXHEADSIZE,in))
       }
     else			
       debug=FALSE;		  		      
-      //debug=TRUE;		  		      
+    //debug=TRUE;		  		      
     // get variants for current entry
     if(!ignore_variants)
-       currVarcnt = pepx_build_varindex(currISO);
+      {
+       if(!FASTAinput) 
+         currVarcnt = pepx_build_varindex(currISO);
+       else
+        currVarcnt = PEFFvarcnt; // varindex already built while processing PEFF entry in pepx_getPEFFvariants
+      }
     else
        currVarcnt = 0;
     totalvarcnt += currVarcnt;
@@ -1486,7 +1497,7 @@ if(!strcmp(command,"build"))
     }
   if ((ignore_variants == 0) && strlen(varfolder) == 0)  
     {
-    fprintf(stderr,"'build' with variants requires a variant folder for argument (option -v)\n");
+    fprintf(stderr,"'build' with variants requires a variant folder for argument (option -w)\n");
     exit(2);
     }
   start = clock();
