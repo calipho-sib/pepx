@@ -1416,9 +1416,8 @@ if(argc < 2)
    if(ptr=strstr(envstring,"=noiso"))
       // output matches at the entry level
       strcpy(matchmode,"ACONLY");
-   if(ptr=strstr(envstring,"=IL"))
-      // IL-merged indexes
-      IL_merge = 1;
+   //if(ptr=strstr(envstring,"=IL"))
+   IL_merge = 1; // IL-merged indexes is the default mode for the web
    if(ptr=strstr(envstring,"=json"))
       // output will be in json
       json = 1;
