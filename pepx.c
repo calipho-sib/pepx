@@ -73,7 +73,7 @@ char currISO[ACLEN];
 char outputmode[16];
 char linesep[4] = "\n";
 char envstring[LINELEN];
-char version[] = "1.53";
+char version[] = "1.55";
 // debug/profiling/stats stuff
 int debug;
 int totalbins=0;
