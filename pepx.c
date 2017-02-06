@@ -18,7 +18,8 @@
 #define MAXSEQSIZE 36500
 // MAXSEQSIZE = size of titin longest isoform
 #define MAXISO 100
-#define MAXVARINPEP 63
+#define MAXVARINPEP 127
+#define MAXVARPERAA 6
 #define LINELEN 1024
 #define ACLEN 16
 //#define BINSIZE 32  // adjust w stats
@@ -58,7 +59,7 @@ typedef struct bin
 BIN** toplevel[MAXPEPSIZE+1];
 
 int varindex_overflow_cnt = 0;
-char variants[MAXSEQSIZE][4];
+char variants[MAXSEQSIZE][MAXVARPERAA];
 char results[MAXSEQ][ACLEN];
 int aacode[26] = {0,2,1,2,3,4,5,6,7,7,8,9,10,11,-1,12,13,14,15,16,1,17,18,-1,19,3};
 // B is D, Z is E, U is C, J is I
@@ -73,7 +74,7 @@ char currISO[ACLEN];
 char outputmode[16];
 char linesep[4] = "\n";
 char envstring[LINELEN];
-char version[] = "1.55";
+char version[] = "1.56";
 // debug/profiling/stats stuff
 int debug;
 int totalbins=0;
@@ -289,7 +290,7 @@ if((NextProtvariants=fopen(fname,"r"))==NULL)
   return(0);
   
 // Reset table each time  
-memset(variants,0,MAXSEQSIZE*4);
+memset(variants,0,MAXSEQSIZE*MAXVARPERAA);
 // Todo: check that orgAA is exactly the same (seq/vars desynchronization) 
 while(fgets(buf,LINELEN,NextProtvariants))
      {
@@ -343,8 +344,8 @@ while(fgets(buf,LINELEN,NextProtvariants))
 	   strcpy(varAA,"X");
 	   varmisscnt1++;
 	   }
-	 for(i=0;i<4;i++)
-	    // we allow 4 different variants at each position: Check if we already have a variant at this pos
+	 for(i=0;i<MAXVARPERAA;i++)
+	    // we allow 6 different variants at each position: Check if we already have a variant at this pos
 	    if(variants[fpos-1][i] == 0)
 	      break;
 	 //if(i) fprintf(stderr,"%s: multiple variants at %d-%d\n",currISO,fpos,lpos); 
@@ -821,10 +822,16 @@ if(!strcmp(matchmode,"ACONLY"))
    ac_cnt = 0;
    for(i=0;i<nbmatch;i++)
       {
+      if(!strchr(matches[i],'-')) 
+        // it can happen at pos 0, eg: VIDLT, to investigate
+        {
+        //fprintf(stderr,"No dash at %d %s\n",i,ac);
+        continue;
+        }
       strcpy(ac,matches[i]);
       *strchr(ac,'-') = 0;
       if(strcmp(ac,lastac)) 
-	strcpy(results[ac_cnt++],ac);
+	       strcpy(results[ac_cnt++],ac);
       strcpy(lastac,ac);
       }
    // re-fill final results
@@ -1104,10 +1111,10 @@ for(i=0;i<seqlen-MINPEPSIZE;i++)
 	    {
 	    if(debug)
 	      fprintf(stderr,"%s variant at pos %d is %c\n",currISO, i+k,variants[i+k][0]);
-	    for(varnb = 0; varnb < 4; varnb++) 
+	    for(varnb = 0; varnb < MAXVARPERAA; varnb++) 
 	       {
 	       if(variants[i+k][varnb] == 0)
-		 break;
+		        break;
 	       if(variants[i+k][varnb] == 'X')
 	         // code for missing AA: shift by one and add next
 	         {
