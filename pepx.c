@@ -19,7 +19,7 @@
 // MAXSEQSIZE = size of titin longest isoform
 #define MAXISO 100
 #define MAXVARINPEP 127
-#define MAXVARPERAA 6
+#define MAXVARPERAA 8
 #define LINELEN 1024
 #define ACLEN 16
 //#define BINSIZE 32  // adjust w stats
@@ -74,7 +74,7 @@ char currISO[ACLEN];
 char outputmode[16];
 char linesep[4] = "\n";
 char envstring[LINELEN];
-char version[] = "1.56";
+char version[] = "1.57";
 // debug/profiling/stats stuff
 int debug;
 int totalbins=0;
@@ -315,6 +315,8 @@ while(fgets(buf,LINELEN,NextProtvariants))
        if((strlen(orgAA) == 2) && (strlen(varAA) == 2) && orgAA[0] == varAA[0])// like A7XYQ1(180-181)
 	   // Store variant at 2nd pos
 	 {
+   if(IL_merge && (varAA[1] == 'I' || varAA[1] == 'L') )
+    varAA[1] = 'J';
 	 variants[fpos][0]=varAA[1];
 	 localvarcnt++;
 	 }
@@ -345,10 +347,12 @@ while(fgets(buf,LINELEN,NextProtvariants))
 	   varmisscnt1++;
 	   }
 	 for(i=0;i<MAXVARPERAA;i++)
-	    // we allow 6 different variants at each position: Check if we already have a variant at this pos
+	    // we allow 8 different variants at each position: Check if we already have a variant at this pos
 	    if(variants[fpos-1][i] == 0)
 	      break;
-	 //if(i) fprintf(stderr,"%s: multiple variants at %d-%d\n",currISO,fpos,lpos); 
+	 //if(i >= MAXVARPERAA) fprintf(stderr,"%s: multiple variants at %d-%d\n",currISO,fpos,lpos); 
+   if(IL_merge && (varAA[0] == 'I' || varAA[0] == 'L') )
+    varAA[0] = 'J';
 	 variants[fpos-1][i]=varAA[0];
 	 localvarcnt++;
 	 }
@@ -588,7 +592,7 @@ if(strlen(acstr) == 0)
      dupcnt++;
      continue; // fprintf(stderr,"\ndup: %s\n",curres[i]);, TODO: investigate why it occurs, eg: ASQSIS
      }
-     //fprintf(stderr,"%d: %s\n",i,curres[i]);
+     //fprintf(stderr,"%d: %s (dupcnt: %d)\n",i,curres[i],dupcnt);
      strcpy(endres[i],curres[i]);
      strcat(acstr,curres[i]);
      strcat(acstr,",");
@@ -618,7 +622,7 @@ else // Check the match did exist for previous peps
 	 prevmatchvar = TRUE;
        else
 	 prevmatchvar = FALSE;
-	 
+	 //fprintf(stderr,"prevmatchvar: %d\n",prevmatchvar);
        if(!strcmp(prevmatch,curres[i]) || (prevmatchvar && strstr(prevmatch,curres[i])))
 	 // If a new match without variant falls on a previous match with variant: keep variant
          {
@@ -637,13 +641,8 @@ else // Check the match did exist for previous peps
          // replace simple match by new variant match
          strcpy(endres[j++],isovar);
        else if(strstr(prevmatch,isoonly))
-	 // reconduct previous variant pos
-         {
-	 // P15085-1-169,Q8WXQ8-1,Q8WXQ8-1-191,Q8WXQ8-1-193,Q8WXQ8-2,Q8WXQ8-2-191,Q8WXQ8-2-193,Q8WXQ8-3,Q8WXQ8-3-191,Q8WXQ8-3-193 HPAIWIDTGIHSR
-         // Occurs when we have I->L variants in IL modeWe must arrange this...
-	 // Q08648-4-72,Q6PDA7-2 TPPYQGDVPLGIR
-	 strcpy(endres[j++],prevmatch);
-         }
+	     // reconduct previous variant pos
+      strcpy(endres[j++],prevmatch);
        //else fprintf(stderr,"%s not added to endres\n\n",isovar);
        }
      *isovar = 0;  
@@ -1165,7 +1164,8 @@ for(i=0;i<seqlen-MINPEPSIZE;i++)
 	else if(strlen(subseq) == pepsize && !strstr(masterseq,subseq))
 	   // variant peps must not exist elsewhere in master
 	   {
-	   //fprintf(stderr,"Variant subseq: %s at pos %d in %s\n",subseq,i+1,currAC);  
+	   //if(pepsize == 6) fprintf(stderr,"Variant subseq: %s at pos %d in %s\n",subseq,i+1,currAC); 
+     //if(!strcmp(subseq,"TIMTDE")) fprintf(stderr,"masterseq: %s\n",masterseq); 
 	   pepx_indexsubseq(subseq,i+1);
 	   }
             //else{printf("i:%d k:%d: orgsseq:%s(%d) sseq:%s\n",i,k,variant[0],pepsize,subseq);}
