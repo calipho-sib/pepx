@@ -337,7 +337,7 @@ while(fgets(buf,LINELEN,NextProtvariants))
 	 } 
        else 
 	 {
-	 if(IL_merge && ((orgAA == 'I' && varAA == 'L') || (orgAA == 'L' && varAA == 'I'))) // In IL mode variants I->L or L->I would just add noise and are ignored
+	 if(IL_merge && ((orgAA[0] == 'I' && varAA[0] == 'L') || (orgAA[0] == 'L' && varAA[0] == 'I'))) // In IL mode variants I->L or L->I would just add noise and are ignored
 	   continue;
 	 // Store variant
 	 if(strlen(varAA) == 0)
@@ -555,7 +555,7 @@ return (strncmp(str1,str2,ACLEN));
 
 int pepcompare (char *str1, char *str2)    
 { 
-fseek(currentindex,(int)str2,0);
+fseek(currentindex,(long)str2,0);
 fgets(currentresult,32,currentindex);
 //fprintf(stderr,"current idx2 file pos:  %li, fseek returned %d\n",(int)str2,fret);
 //fprintf(stderr,"res: %s\n",currentresult);
@@ -1199,7 +1199,7 @@ while(fgets(fastabuf,64,infile))
    {
    if(fastabuf[0] == '>') // we reached next header line
       {
-      if(!strrchr(buf,"\n")) 
+      if(!strrchr(buf,'\n')) 
         strcat(buf,"\n"); 
       if(strchr(fastabuf,'\n'))
         offset = -strlen(fastabuf);
@@ -1213,7 +1213,7 @@ while(fgets(fastabuf,64,infile))
    strcat(buf,fastabuf);
    }
 
- if(!strrchr(buf,"\n"))  
+ if(!strrchr(buf,'\n'))  
   strcat(buf,"\n");  
  }
 
