@@ -28,6 +28,7 @@ Pepx possible arguments are:
 - --peptide-file (short=-p) a file with peptides to search (1 peptide/line, if not provided peptides will be read from stdin)
 - --ignore-variants to build indexes not considering variants
 - --IL to build indexes merging I and L
+- --6mers-only to build only 6-mer indexes (saves disk space)
 - --noiso (short=-n) to output search results at the entry level
 
 Current limitation:
