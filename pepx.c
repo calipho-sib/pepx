@@ -26,8 +26,7 @@
 #define BINSIZE 16  // adjust w stats, this is becoming a problem, have to reduce to 12 when indexing with variants !
 // optimal binsizes: 2->1000, 3->100, 4->25, 5->10, 6->?
 #define MINPEPSIZE 3
-//#define MAXPEPSIZE 5
-#define MAXPEPSIZE 6
+#define MAXPEPSIZE 7
 // Allowing 7 implies adapting BINSIZE t0 low value in 7-mers (memory pbs)
 #define SILENT 1
 #define INDEX2WIDTH 12
@@ -74,7 +73,7 @@ char currISO[ACLEN];
 char outputmode[16];
 char linesep[4] = "\n";
 char envstring[LINELEN];
-char version[] = "1.58";
+char version[] = "1.7";
 // debug/profiling/stats stuff
 int debug;
 int totalbins = 0;
@@ -87,10 +86,11 @@ int totalvarcnt = 0;
 int varmisscnt1 = 0, varmisscnt2 = 0, varmisscnt3 = 0;
 int ignore_variants = 0;
 int IL_merge = 0;
-int sixmers_only = 0;
+int sevenmers_only = 0;
 int json = 0;
 int FASTAinput = 0;
 int mINPEPSIZE = 3;
+int mAXPEPSIZE = MAXPEPSIZE - 1; // default to 6-mers
 static char jsonBuffer[8192];// weird but alters idxinfo[6] when changed if not static
 char varfolder[LINELEN];
 char indexfolder[LINELEN] = ".";
@@ -386,16 +386,17 @@ void pepx_loadall()
         strcat(idxpath, "/");
     }
 
+    // Check if we've indexed small-mers
     sprintf(fname, "%spepxIL3.idx", idxpath);
     if((idx = fopen(fname, "r")) == NULL)
     {
         sprintf(fname, "%spepx3.idx", idxpath);
         if((idx = fopen(fname, "r")) == NULL)
-            // Indexed only with 6-mers
-            mINPEPSIZE = 6;
+            // Indexed only with 7-mers
+            mINPEPSIZE = mAXPEPSIZE = MAXPEPSIZE;
     }
 
-    for(i = mINPEPSIZE; i <= MAXPEPSIZE; i++)
+    for(i = mINPEPSIZE; i <= mAXPEPSIZE; i++)
     {
         usscnt = 0;
         if(IL_merge)
@@ -412,7 +413,7 @@ void pepx_loadall()
             idxinfoIL[i].ffh = idx;
         else
             idxinfo[i].ffh = idx;
-        strcat(fname, "2");
+        strcat(fname, "2"); // secundary index name
         if((idx = fopen(fname, "r")) == NULL)
         {
             perror(fname);
@@ -441,7 +442,7 @@ void pepx_initindexes()
     int pepsize;
     BIN **ptr;
 
-    for(pepsize = mINPEPSIZE; pepsize <= MAXPEPSIZE; pepsize++)
+    for(pepsize = mINPEPSIZE; pepsize <= mAXPEPSIZE; pepsize++)
     {
         if((ptr = calloc(1, pow20[pepsize] * sizeof(BIN *))) == NULL)
         {
@@ -547,7 +548,7 @@ void pepx_saveall()
     int i;
     char fname[LINELEN];
 
-    for(i = mINPEPSIZE; i <= MAXPEPSIZE; i++)
+    for(i = mINPEPSIZE; i <= mAXPEPSIZE; i++)
     {
         if(!IL_merge)
             sprintf(fname, "%s/pepx%d.idx", indexfolder, i);
@@ -683,7 +684,7 @@ int pepx_search(char *query, IDXDATA *idx)
     typedef char actab[ACLEN];
     int i, j, jpos = -1, jcnt = 0, found, rescnt = 0, pepsize, fpos;
     char querystring[MAXPEPSIZE], ac[ACLEN], newquery[MAXPEPSIZE], fname[LINELEN], buf[MAXPEPSIZE + 1], *ptr;
-    char acholder[ACLEN + 1];
+    char acholder[ACLEN + 1], jokerAA;
     actab *currentresults;
     FILE *ffh;
 
@@ -692,7 +693,6 @@ int pepx_search(char *query, IDXDATA *idx)
     currentpepsize = pepsize;
     currentindex = idx[pepsize].fh;
     currentresults = results;
-
     for(i = 0; i < pepsize; i++)
         if(querystring[i] == 'X')
         {
@@ -704,33 +704,37 @@ int pepx_search(char *query, IDXDATA *idx)
             querystring[i] = 'J';
 
     if(jcnt > 1)
-        // joker
+        // too many jokers
     {
         fprintf(stderr, "\n%s: No more than 1 joker/6AA\n", query);
         return(0);
     }
-    else if((jcnt == 1) && (jpos != 0) && (jpos != pepsize - 1))
-        // internal joker
+    else if(jcnt == 1) // we have one joker
     {
         for(i = 0; i < strlen(aarevcode); i++)
-            // For each of the 20 AAs
+            // For each of the 20 AAs, or 19 if in ILmode
         {
-            memset(newquery, 0, MAXPEPSIZE);
+            memset(newquery, 0, mAXPEPSIZE);
             strncpy(newquery, querystring, jpos);
-            strncat(newquery, &aarevcode[i], 1); // Todo: check if this works for I/L
+            jokerAA = aarevcode[i];
+            if(IL_merge && jokerAA == 'I') // skip this one
+                continue;
+            if(IL_merge && jokerAA == 'L')
+                jokerAA = 'J';
+            strncat(newquery, &jokerAA, 1); // append single char joker
             strcat(newquery, querystring + jpos + 1);
-            //fprintf(stderr,"\nnewquery: %s\n",newquery);
+            fprintf(stderr,"\nnewquery: %s\n",newquery);
             if(bsearch(newquery, NULL, idx[pepsize].elemcnt, pepsize + INDEX2WIDTH, pepcompare))
             {
                 fpos = atoi(currentresult + pepsize);
                 ffh = idx[pepsize].ffh;
                 fseek(ffh, fpos, SEEK_SET);
                 // skip peptide
-                fgets(ac, ACLEN, ffh);
+                fgets(ac, ACLEN, ffh); // read matched peptide
                 while(fgets(ac, ACLEN, ffh))
                     // get all ACs
                 {
-                    if(strlen(ac) > 7)
+                    if(strlen(ac) > MAXPEPSIZE + 1) // We're still an accession 
                     {
                         if(ptr = strrchr(ac, '\n'))
                             * ptr = 0;
@@ -747,27 +751,11 @@ int pepx_search(char *query, IDXDATA *idx)
                             strcpy(currentresults[rescnt++], ac);
                     }
                     else
-                        break;
+                        break; // We've reached the next peptide 
                 }
             }
         }
         return(rescnt);
-    }
-
-    if(jpos == 0)
-        // initial  joker -> reduce query length
-    {
-        strcpy(buf, querystring + 1);
-        strcpy(querystring, buf);
-        currentpepsize = --pepsize;
-        currentindex = idx[pepsize].fh;
-    }
-    else if (jpos == pepsize - 1)
-        // terminal  joker -> reduce query length
-    {
-        querystring[pepsize - 1] = 0;
-        currentpepsize = --pepsize;
-        currentindex = idx[pepsize].fh;
     }
 
     // No jokers
@@ -788,7 +776,7 @@ int pepx_search(char *query, IDXDATA *idx)
         // get all ACs
     {
         strncpy(ac, acholder, ACLEN);
-        if(strlen(ac) > 7)
+        if(strlen(ac) > MAXPEPSIZE + 1)
         {
             if(ptr = strrchr(ac, '\n'))
                 * ptr = 0;
@@ -971,21 +959,21 @@ int pepx_processquery(char *orgquerystring)
     strcpy(query, querystring);
     //if(strlen(query) >= 4096) {strncpy(subquery,query,12); subquery[12] = 0; fprintf(stderr,"\nQuery length: %d %s...\n",strlen(query),subquery);}
 
-    while(strlen(query) > MAXPEPSIZE)
+    while(strlen(query) > mAXPEPSIZE)
     {
         // Split query in overlaping subqueries of maximum length
         //fprintf(stderr,"pepx_processquery filtered query: %s, copying %d AAs in subquery\n",query,MAXPEPSIZE);
-        strncpy(subquery, query, MAXPEPSIZE);
-        subquery[MAXPEPSIZE] = 0;
+        strncpy(subquery, query, mAXPEPSIZE);
+        subquery[mAXPEPSIZE] = 0;
         //fprintf(stderr,"pepx_processquery subquery %s\n",subquery);
+        //strcpy(nextquery, query + mAXPEPSIZE - 1); // Faster but more false pos
         // Prepare next subquery
-        strcpy(nextquery, query + MAXPEPSIZE - 1); // Faster but more false pos
-        //if(strlen(querystring) > 25)
-        //strcpy(nextquery,query + MAXPEPSIZE-1); // Faster but more false pos
-        /*else if(strlen(querystring) > 16)
+        if(strlen(querystring) > 25)
+          strcpy(nextquery,query + MAXPEPSIZE-1); // Faster but more false pos
+        else if(strlen(querystring) > 16)
           strcpy(nextquery,query + 2);
         else
-          strcpy(nextquery,query + 1); */
+          strcpy(nextquery,query + 1); 
         strcpy(query, nextquery);
         //fprintf(stderr,"will look for %s\n",query);
         if(IL_merge)
@@ -1004,10 +992,10 @@ int pepx_processquery(char *orgquerystring)
     if(i = strlen(query)) // otherwise we're finished
     {
         //fprintf(stderr,"pepx_processquery query not finished, prepare next subquery\n");
-        if(strlen(subquery)) // issue last subquery with the longest x-mer
+        if(strlen(subquery)) // issue last subquery with the longest remaining x-mer
         {
-            strncpy(subquery, &querystring[strlen(querystring) - MAXPEPSIZE], MAXPEPSIZE);
-            subquery[MAXPEPSIZE] = 0;
+            strncpy(subquery, &querystring[strlen(querystring) - mAXPEPSIZE], mAXPEPSIZE);
+            subquery[mAXPEPSIZE] = 0;
         }
         else // query peptide was <= MAXPEPSIZE
             strcpy(subquery, query);
@@ -1093,12 +1081,12 @@ void pepx_indexseq(char *seq, int varcnt)
 
     seqlen = strlen(seq);
     if(debug) fprintf(stderr, "indexing %s (%d): %s\n", currISO, seqlen, seq);
-    for(i = 0; i < seqlen - mINPEPSIZE; i++)
+    for(i = 0; i <= seqlen - mINPEPSIZE; i++)
     {
         // C-ters
         //printf("indexing at %d/%d\n",i,seqlen);
-        for(pepsize = mINPEPSIZE; pepsize <= MAXPEPSIZE; pepsize++)
-        {
+        for(pepsize = mINPEPSIZE; pepsize <= mAXPEPSIZE; pepsize++)
+        { 
             if(seqlen - i < pepsize)
                 // subseq too short
                 break;
@@ -1388,14 +1376,14 @@ void  printHelp(char *mode)
         fprintf(stderr, "--json output in json format (incompatible with -noiso mode)\n");
         fprintf(stderr, "--peptide-file (short=-p) a file with peptides to search (1 peptide/line, if not provided peptides will be read from stdin)\n");
         fprintf(stderr, "--ignore-variants to build indexes not considering variants\n");
-        fprintf(stderr, "--6mers-only to build only 6-mer indexes (saves disk space)\n");
+        fprintf(stderr, "--7mers-only to build only 7-mer indexes (saves disk space)\n");
         fprintf(stderr, "--noiso (short=-n) to output search results at the entry level\n");
-        fprintf(stderr, "--IL to build indexes merging I and L\n");
+        fprintf(stderr, "--IL to build indexes merging I and L and search these indexes\n");
     }
     fprintf(stderr, "\nCurrent limitation:\n\n");
-    fprintf(stderr, "- poly-AA stretches > %d cannot be found\n", MAXPEPSIZE);
+    fprintf(stderr, "- poly-AA stretches > %d cannot be exactly found and are overpredicted\n", MAXPEPSIZE);
     fprintf(stderr, "- only snp-style (1 AA for 1 other AA), and 1-AA-miss variants are accounted \n");
-    fprintf(stderr, "- only 32 variant accounted within a given x-mer\n");
+    fprintf(stderr, "- max 128 variant accounted within a given x-mer\n");
     fprintf(stderr, "- only 1 joker (X) allowed in a given x-mer\n");
 }
 
@@ -1412,7 +1400,7 @@ int main(int argc, char **argv)
     {
         {"ignore-variants",   no_argument,       &ignore_variants, 1},
         {"IL",   no_argument,       &IL_merge, 1},
-        {"6mers-only",   no_argument,       &sixmers_only, 1},
+        {"7mers-only",   no_argument,       &sevenmers_only, 1},
         {"search",  no_argument,       0, 's'},
         {"noiso",   no_argument,       0, 'n'},
         {"help",   no_argument,       0, 'h'},
@@ -1533,12 +1521,15 @@ int main(int argc, char **argv)
         start = clock();
         //strcpy(seqfname,argv[2]);
         printf("Building with seqfile %s, indexes at %s, variants at %s\n", seqfname, indexfolder, ignore_variants ? "ignored" : varfolder);
-        if(sixmers_only)
+        if(sevenmers_only)
         {
-            mINPEPSIZE = 6;
-            printf("6-mers indexes only.\n");
+            mINPEPSIZE = MAXPEPSIZE;
+            mAXPEPSIZE = MAXPEPSIZE;
+            printf("7-mers indexes only.\n");
         }
-        //exit(0);
+        else
+            mAXPEPSIZE = MAXPEPSIZE - 1;
+           
         pepx_build(seqfname);
         fprintf(stderr, "Duration: %d\n", clock() - start);
     }
