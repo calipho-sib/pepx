@@ -690,6 +690,11 @@ int pepx_search(char *query, IDXDATA *idx)
 
     strcpy(querystring, query);
     pepsize = strlen(query);
+    if(pepsize < mINPEPSIZE) // eg: six AA peptide with 7-mer indexes
+       {
+       strcat(querystring,"X"); // add a trailing joker to match index size
+       pepsize++;
+       } 
     currentpepsize = pepsize;
     currentindex = idx[pepsize].fh;
     currentresults = results;
@@ -723,7 +728,7 @@ int pepx_search(char *query, IDXDATA *idx)
                 jokerAA = 'J';
             strncat(newquery, &jokerAA, 1); // append single char joker
             strcat(newquery, querystring + jpos + 1);
-            fprintf(stderr,"\nnewquery: %s\n",newquery);
+            //fprintf(stderr,"\nnewquery: %s\n",newquery);
             if(bsearch(newquery, NULL, idx[pepsize].elemcnt, pepsize + INDEX2WIDTH, pepcompare))
             {
                 fpos = atoi(currentresult + pepsize);
