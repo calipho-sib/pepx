@@ -27,13 +27,13 @@ Pepx possible arguments are:
 - --variant-folder (short=-w) to specify a folder for json variants (required for build command when ignore-variants flag is not set)
 - --peptide-file (short=-p) a file with peptides to search (1 peptide/line, if not provided peptides will be read from stdin)
 - --ignore-variants to build indexes not considering variants
-- --IL to build indexes merging I and L
-- --6mers-only to build only 6-mer indexes (saves disk space)
+- --IL to build indexes merging I and L and search these indexes
+- --7mers-only to build only 7-mer indexes (saves disk space)
 - --noiso (short=-n) to output search results at the entry level
 
 Current limitation:
 
-- poly-AA stretches > 6 cannot be found
+- poly-AA stretches > 7 can not be exactly found and are overpredicted
 - only snp-style (1 AA for 1 other AA), and 1-AA-miss variants are accounted
 - max 128 variants accounted within a given x-mer
 - only 1 joker (X) allowed in a given x-mer in search mode
