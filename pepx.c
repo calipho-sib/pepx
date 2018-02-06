@@ -73,7 +73,7 @@ char currISO[ACLEN];
 char outputmode[16];
 char linesep[4] = "\n";
 char envstring[LINELEN];
-char version[] = "1.7";
+char version[] = "1.71";
 // debug/profiling/stats stuff
 int debug;
 int totalbins = 0;
@@ -1185,7 +1185,7 @@ void pepx_indexseq(char *seq, int varcnt)
 // ----------------pepx_getFASTAentry ----------------
 void pepx_getFASTAentry(char *iso, char *buf, FILE *infile, int *PEFFvarcnt)
 {
-    char *ptr, fastabuf[1024];
+    char *ptr, fastabuf[4096];
     int seqlen, varcnt, offset;
     //fprintf(stderr,"start pepx_getFASTAentry\n");
     if(!strncmp(buf, ">nxp:", 5)) // NetProt peff
@@ -1202,8 +1202,10 @@ void pepx_getFASTAentry(char *iso, char *buf, FILE *infile, int *PEFFvarcnt)
     }
 
     *buf = 0; // Reset buf to receive sequence
-    while(fgets(fastabuf, 1024, infile))
-    {
+    //fprintf(stderr,"getFASTAentry:%s\n",iso);
+    
+    while(fgets(fastabuf, 4096, infile))
+    { 
         if(fastabuf[0] == '>') // we reached next header line
         {
             if(!strrchr(buf, '\n'))
@@ -1211,17 +1213,19 @@ void pepx_getFASTAentry(char *iso, char *buf, FILE *infile, int *PEFFvarcnt)
             if(strchr(fastabuf, '\n'))
                 offset = -strlen(fastabuf);
             else
-                offset = -1023;
+                offset = -4095;
             //fprintf(stderr,"rewinding with offset %d\n",offset);
-            fseek(infile, offset, SEEK_CUR); // rewind line
+            fseek(infile, offset, SEEK_CUR); // rewind line for next call to pepx_getFASTAentry
             return;
         }
-        *strchr(fastabuf, '\n') = 0;
+        *strrchr(fastabuf, '\n') = 0;
+        if(ptr=strrchr(fastabuf, '\r')) // in case of DOS-style peff
+            *ptr=0;
         strcat(buf, fastabuf);
     }
 
     if(!strrchr(buf, '\n'))
-        strcat(buf, "\n");
+        strcat(buf, "\n"); // last line in file
     // if(varcnt) // reinsert originals
 }
 
@@ -1326,7 +1330,7 @@ void pepx_build(char *seqfilename)
         while(!isalpha(masterseq[strlen(masterseq) - 1])) masterseq[strlen(masterseq) - 1] = 0;
         //*strchr(masterseq,'\n')=0; //won't work in PEFF scan for mysterious reason
         seqlen = strlen(masterseq);
-        //fprintf(stderr,"%s (%d)\n",currISO,seqlen);
+        
         if(IL_merge)
             // Replace all I/L with J
             for(i = 0; i < seqlen; i++)
@@ -1356,6 +1360,7 @@ void pepx_build(char *seqfilename)
         totalvarcnt += currVarcnt;
         //debug=TRUE;
         pepx_indexseq(masterseq, currVarcnt);
+        //fprintf(stderr,"%s %s (%d)\n",currISO,masterseq,seqlen); 
         seqcnt++;
         if((seqcnt % 1000) == 0)
             fprintf(stderr, "Processing seq %d...\n", seqcnt);
