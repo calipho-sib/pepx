@@ -73,7 +73,7 @@ char currISO[ACLEN];
 char outputmode[16];
 char linesep[4] = "\n";
 char envstring[LINELEN];
-char version[] = "1.71";
+char version[] = "1.72";
 // debug/profiling/stats stuff
 int debug;
 int totalbins = 0;
@@ -583,7 +583,7 @@ int pepx_reportnomatch(char *orgquerystring)
     if(json)
         fprintf(stdout, "]\n}"); // close empty entrymatches
     else
-        fprintf(stdout, "NO_MATCH %s%s", orgquerystring, linesep);
+        fprintf(stdout, "\nNO_MATCH %s%s", orgquerystring, linesep);
     return(0);
 }
 
@@ -1083,7 +1083,9 @@ void pepx_indexseq(char *seq, int varcnt)
 {
     char subseq[MAXPEPSIZE + 1], varsubseq[MAXPEPSIZE + 1], variant[MAXVARINPEP][MAXPEPSIZE + 1];
     int i, k, varnb, too_many_variants = 0, seqlen, repeat_offset, varindex = 1, pepsize;
+    int varposarray[MAXVARINPEP];
 
+    memset(varposarray, 0, MAXVARINPEP);
     seqlen = strlen(seq);
     if(debug) fprintf(stderr, "indexing %s (%d): %s\n", currISO, seqlen, seq);
     for(i = 0; i <= seqlen - mINPEPSIZE; i++)
@@ -1115,7 +1117,7 @@ void pepx_indexseq(char *seq, int varcnt)
                     if(variants[i + k][0])
                     {
                         if(debug)
-                            fprintf(stderr, "%s variant at pos %d is %c\n", currISO, i + k, variants[i + k][0]);
+                            fprintf(stderr, "%s first variant at pos %d is %c\n", currISO, i + k, variants[i + k][0]);
                         for(varnb = 0; varnb < MAXVARPERAA; varnb++)
                         {
                             if(variants[i + k][varnb] == 0)
@@ -1134,8 +1136,13 @@ void pepx_indexseq(char *seq, int varcnt)
                                 }
                             }
                             else
+                            {
                                 *(varsubseq + k) = variants[i + k][varnb];
+                                
+                            }
+                            //fprintf(stderr, "varnb-%d %s variant at pos %d is %c\n", varnb, currISO, i + k + 1, variants[i + k][varnb]);
                             strcpy(variant[varindex++], varsubseq);
+                            varposarray[varindex-1] = i+k+1;
                             //printf("at varindex %d: %s\n",varindex-1, variant[varindex-1]);
                             if(varindex >= MAXVARINPEP)
                             {
@@ -1153,7 +1160,7 @@ void pepx_indexseq(char *seq, int varcnt)
                         }
                     }
                 }
-                //printf("varindex loop for %s\n",subseq);
+                //printf("varindex loop for %s done, (%d variants)\n",subseq, varindex-1);
             }
             for(k = 0; k < varindex; k++)
                 // nonvariant subseq is 0
@@ -1170,9 +1177,10 @@ void pepx_indexseq(char *seq, int varcnt)
                 else if(strlen(subseq) == pepsize && !strstr(masterseq, subseq))
                     // variant peps must not exist elsewhere in master
                 {
-                    //if(pepsize == 6) fprintf(stderr,"Variant subseq: %s at pos %d in %s\n",subseq,i+1,currAC);
-                    //if(!strcmp(subseq,"TIMTDE")) fprintf(stderr,"masterseq: %s\n",masterseq);
-                    pepx_indexsubseq(subseq, i + 1);
+                    if(pepsize == 7) // Test new (absolute) varpos in variant peptide id
+                      pepx_indexsubseq(subseq, varposarray[k]);
+                    else
+                      pepx_indexsubseq(subseq, i + 1);  
                 }
                 //else{printf("i:%d k:%d: orgsseq:%s(%d) sseq:%s\n",i,k,variant[0],pepsize,subseq);}
             }
@@ -1194,11 +1202,15 @@ void pepx_getFASTAentry(char *iso, char *buf, FILE *infile, int *PEFFvarcnt)
         *strchr(iso, ' ') = 0;
         // if(ptr=strstr(varbuf,"VariantSimple="))...
     }
-    else // trembl fasta
+    else // trembl or any custom fasta
     {
         strncpy(iso, buf + 4, 15);
-        *strchr(iso, '|') = 0; // assume pipe separator
-        strcat(iso, "-1"); // Add an iso id
+        if(ptr=strchr(iso, '|')) // first assume pipe separator
+          *ptr=0;
+        else
+          *strchr(iso,' ') = 0; // then space separator
+        if(!strchr(iso,'-'))
+          strcat(iso, "-1"); // Add an iso id if not present
     }
 
     *buf = 0; // Reset buf to receive sequence
@@ -1220,6 +1232,8 @@ void pepx_getFASTAentry(char *iso, char *buf, FILE *infile, int *PEFFvarcnt)
         }
         *strrchr(fastabuf, '\n') = 0;
         if(ptr=strrchr(fastabuf, '\r')) // in case of DOS-style peff
+            *ptr=0;
+        if(ptr=strchr(fastabuf, '*')) // * is stop codon, sometimes included in fasta seqs
             *ptr=0;
         strcat(buf, fastabuf);
     }
@@ -1395,6 +1409,7 @@ void  printHelp(char *mode)
     fprintf(stderr, "- only snp-style (1 AA for 1 other AA), and 1-AA-miss variants are accounted \n");
     fprintf(stderr, "- max 128 variant accounted within a given x-mer\n");
     fprintf(stderr, "- only 1 joker (X) allowed in a given x-mer\n");
+    fprintf(stderr, "- if input sequences for indexing are in fasta format then the file must end with a newline and identifier must be pipe- or space-separated and no longer than 15 bytes\n");
 }
 
 // ---------------- main ---------------------
@@ -1600,5 +1615,4 @@ int main(int argc, char **argv)
     }
     return(0);
 }
-
 
