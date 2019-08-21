@@ -872,6 +872,8 @@ void  pepx_displaymatches(char matches[][ACLEN + 4] , int nbmatch, char *orgquer
             if(json)
             {
                 strcpy(ac, matches[i]);
+                if(!strchr(matches[i], '-')) // it can happen that after qsort, element 0 is empty: investigate with AAAAAA
+                  continue;
                 *strchr(ac, '-') = 0;
                 if(strcmp(ac, lastac))
                 {
