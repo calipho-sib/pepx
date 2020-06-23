@@ -1319,7 +1319,7 @@ void pepx_build(char *seqfilename)
                 *strchr(currISO, ' ') = 0;
         }
 
-        if(strlen(currISO) > 10 && (!strncmp(currISO, "A0A0", 4) || !strncmp(currISO, "A0A1", 4)  || !strncmp(currISO, "A0A2", 4)))
+        if(strlen(currISO) > 10 && !strncmp(currISO, "A0A", 3))
             // 10 digit AC, trick it and remember only significant digits in a unique 6-digit length format (there is no real AC starting with P[A-Z]
             // eg: A0A087WTH1 -> PAWTH1
         {
