@@ -7,7 +7,6 @@
 //#include <sys/syscall.h>
 #include <errno.h>
 #include <getopt.h>
-#include <malloc.h>
 
 #define FALSE 0
 #define TRUE  1
@@ -74,7 +73,7 @@ char currISO[ACLEN];
 char outputmode[16];
 char linesep[4] = "\n";
 char envstring[MAXQUERYLENGTH];
-char version[] = "1.72";
+char version[] = "1.73";
 // debug/profiling/stats stuff
 int debug;
 int totalbins = 0;
@@ -104,8 +103,8 @@ char *code4tenAA(char *currentAC)
     static char *tab[] = {"A A0A024", "B A0A044", "C A0A067", "D A0A075", "E A0A087", "F A0A088", "G A0A096", "H A0A0A0", "I A0A0A6", "J A0A0B4", "K A0A0C3",
                           "L A0A0C4", "M A0A0C5", "N A0A0D2", "O A0A0D5", "P A0A0D9", "Q A0A0E3", "R A0A0G2", "S A0A0H2", "T A0A0J9", "U A0A0K0", "V A0A0M3", "W A0A0N4",
                           "X A0A0R4", "Y A0A0S2", "Z A0A0U1", "a A0A0U5", "b A0A0X1", "c A0A140", "d A0A182", "e A0A1B0", "f A0A1C7", "g A0A1D5", "h A0A1W2", "i A0A286",
-                          "j A0A2R8", "k A0A0K2", "l A0A2Z4", "m A0A494", "n A0A5F9", "o A0A3B3"
-                         };
+                          "j A0A2R8", "k A0A0K2", "l A0A2Z4", "m A0A494", "n A0A5F9", "o A0A3B3", "x A0A1L1", "y A0A338", "z A0A5K7"
+                         }; // x,y,z are for mouse SP
 
     if(!strncmp(currentAC, "P", 1))
         // convert back to 10 digit AC
@@ -386,14 +385,17 @@ void pepx_loadall()
         strcat(idxpath, "/");
     }
     // Check if we've indexed small-mers
-    sprintf(fname, "%spepxIL3.idx", idxpath);
+    sprintf(fname, "%spepxIL7.idx", idxpath);
     if((idx = fopen(fname, "r")) == NULL)
     {
-        sprintf(fname, "%spepx3.idx", idxpath);
-        if((idx = fopen(fname, "r")) == NULL)
+        sprintf(fname, "%spepx7.idx", idxpath);
+        if((idx = fopen(fname, "r")) != NULL)
             // Indexed only with 7-mers
             mINPEPSIZE = mAXPEPSIZE = MAXPEPSIZE;
     }
+    else
+        mINPEPSIZE = mAXPEPSIZE = MAXPEPSIZE;
+
     for(i = mINPEPSIZE; i <= mAXPEPSIZE; i++)
     {
         usscnt = 0;
@@ -1411,7 +1413,7 @@ void  printHelp(char *mode)
     fprintf(stderr, "- only snp-style (1 AA for 1 other AA), and 1-AA-miss variants are accounted \n");
     fprintf(stderr, "- max 128 variant accounted within a given x-mer\n");
     fprintf(stderr, "- only 1 joker (X) allowed in a given x-mer\n");
-    fprintf(stderr, "- if input sequences for indexing are in fasta format then the file must end with a newline and identifier must be pipe- or space-separated and no longer than 15 bytes\n");
+    fprintf(stderr, "- if input sequences for indexing are in fasta format, for instance the Uniprot-reviewed mouse proteome, then the file must end with a newline and identifier must be pipe- or space-separated and no longer than 15 bytes\n");
 }
 
 // ---------------- main ---------------------
