@@ -215,7 +215,7 @@ char *pepx_tojson(char *finalresult)
 int pepx_create_variant_files(char *varfolder)
 {
     FILE *varmaster, *out;
-    char *token, buf[LINELEN], entryvarbuf[524288] = "", org[64], dest[128], fname[128], lastac[16] = "", ac[16], nxid[16], annotId[32];
+    char *token, buf[LINELEN], entryvarbuf[1000000] = "", org[64], dest[128], fname[128], lastac[16] = "", ac[16], nxid[16], annotId[32];
     int startpos, endpos, i = 0;
 
     fprintf(stderr, "Building for first time with variants, please wait...\n");
