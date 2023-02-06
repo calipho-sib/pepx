@@ -103,7 +103,8 @@ char *code4tenAA(char *currentAC)
     static char *tab[] = {"A A0A024", "B A0A044", "C A0A067", "D A0A075", "E A0A087", "F A0A088", "G A0A096", "H A0A0A0", "I A0A0A6", "J A0A0B4", "K A0A0C3",
                           "L A0A0C4", "M A0A0C5", "N A0A0D2", "O A0A0D5", "P A0A0D9", "Q A0A0E3", "R A0A0G2", "S A0A0H2", "T A0A0J9", "U A0A0K0", "V A0A0M3", "W A0A0N4",
                           "X A0A0R4", "Y A0A0S2", "Z A0A0U1", "a A0A0U5", "b A0A0X1", "c A0A140", "d A0A182", "e A0A1B0", "f A0A1C7", "g A0A1D5", "h A0A1W2", "i A0A286",
-                          "j A0A2R8", "k A0A0K2", "l A0A2Z4", "m A0A494", "n A0A5F9", "o A0A3B3", "x A0A1L1", "y A0A338", "z A0A5K7"
+                          "j A0A2R8", "k A0A0K2", "l A0A2Z4", "m A0A494", "n A0A5F9", "o A0A3B3", "p A0A455", "q A0A590", "r A0A6I8", "s A0A804", 
+                          "x A0A1L1", "y A0A338", "z A0A5K7"
                          }; // x,y,z are for mouse SP
 
     if(!strncmp(currentAC, "P", 1))
